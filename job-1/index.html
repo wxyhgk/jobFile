@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分子结构与能量分析</title>
+    <!-- 引入外部脚本，移除 integrity 和 crossorigin 属性 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.0.3/3Dmol-min.js" defer></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js" defer></script>
+    <!-- 引入css文件 -->
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="main-container">
+        <div class="top-row">
+            <div class="panel">
+                <div class="panel-title">分子结构</div>
+                <div id="viewer_container" style="height: 400px; width: 100%;">
+                    <div id="viewer" style="height: 100%; width: 100%;"></div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-title">优化曲线</div>
+                <div style="display: flex; align-items: center;">
+                    <div id="energy-chart" style="flex: 1;"></div>
+                    <div class="plot-button-container">
+                        <button class="plot-button" data-plot-type="energy">能量</button>
+                        <button class="plot-button" data-plot-type="max_force">最大力</button>
+                        <button class="plot-button" data-plot-type="rms_force">RMS力</button>
+                        <button class="plot-button" data-plot-type="max_disp">最大位移</button>
+                        <button class="plot-button" data-plot-type="rms_disp">RMS位移</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="bottom-panel">
+            <div class="info-items">
+                <div class="info-item">
+                    <span class="info-label">当前步骤:</span>
+                    <span class="info-value" id="step-value">0</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">能量值:</span>
+                    <span class="info-value" id="energy-value">0 Hartree</span>
+                </div>
+                <!-- 新增四个信息项 -->
+                <div class="info-item">
+                    <span class="info-label">最大力:</span>
+                    <span class="info-value" id="max_force-value">0 Hartree/Bohr</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">RMS力:</span>
+                    <span class="info-value" id="rms_force-value">0 Hartree/Bohr</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">最大位移:</span>
+                    <span class="info-value" id="max_disp-value">0 Bohr</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">RMS位移:</span>
+                    <span class="info-value" id="rms_disp-value">0 Bohr</span>
+                </div>
+                <span id="loading-indicator" aria-live="polite">加载中...</span>
+            </div>
+            <div class="slider-container">
+                <label for="step-slider">步骤:</label>
+                <input type="range" id="step-slider" min="0" max="0" value="0" step="1" aria-label="步骤滑块">
+            </div>
+            <div class="control-panel">
+                <button class="control-button" id="play-pause-button" aria-label="播放或暂停">播放</button>
+                <button class="control-button" id="step-back-button" aria-label="上一步">上一步</button>
+                <button class="control-button" id="step-forward-button" aria-label="下一步">下一步</button>
+                <button class="control-button" id="reset-button" aria-label="重置">重置</button>
+                <button class="control-button" id="toggle-autoscale-button" aria-label="切换自动缩放">关闭自动缩放</button>
+                <div class="speed-control">
+                    <label for="speed-input">速度(ms):</label>
+                    <input type="number" id="speed-input" value="100" min="50" step="50" aria-label="播放速度输入">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            'use strict';
+
+            // 常量定义
+            const TRAJECTORY_URL = 'https://pan.wxyhgk.com/d/local/html/test1/data_3dmol.json';
+            const MIN_PLAYBACK_SPEED = 50;
+            const DEFAULT_PLAYBACK_SPEED = 100;
+
+            // 状态变量
+            let viewer = null;
+            let currentStep = 0;
+            let trajectoryData = null;
+            let isLoading = false;
+            let isPlaying = false;
+            let playInterval = null;
+            let playbackSpeed = DEFAULT_PLAYBACK_SPEED;
+            let viewerState = null;
+            let isAutoScale = true;
+            let currentPlotType = 'energy'; 
+            let plotTitles = {
+                'energy': '能量 (Hartree)',
+                'max_force': '最大力 (Hartree/Bohr)',
+                'rms_force': 'RMS力 (Hartree/Bohr)',
+                'max_disp': '最大位移 (Bohr)',
+                'rms_disp': 'RMS位移 (Bohr)'
+            };
+            let yAxisTitles = {
+                'energy': '能量 (Hartree)',
+                'max_force': '最大力 (Hartree/Bohr)',
+                'rms_force': 'RMS力 (Hartree/Bohr)',
+                'max_disp': '最大位移 (Bohr)',
+                'rms_disp': 'RMS位移 (Bohr)'
+            };
+            let minY = null;
+            let maxY = null;
+
+            // 定义颜色方案
+            const colorScheme = {
+                'energy': 'rgba(31, 119, 180, 1)',      // 蓝色
+                'max_force': 'rgba(255, 127, 14, 1)',   // 橙色
+                'rms_force': 'rgba(44, 160, 44, 1)',    // 绿色
+                'max_disp': 'rgba(214, 39, 40, 1)',      // 红色
+                'rms_disp': 'rgba(148, 103, 189, 1)'    // 紫色
+            };
+
+            /**
+             * 创建图表数据的函数
+             * @param {string} plotType - 当前的图表类型
+             * @returns {Object|null} - 返回图表数据对象或null
+             */
+            function createPlotData(plotType) {
+                if (!trajectoryData) return null;
+
+                const data = trajectoryData.frames.map(frame => {
+                    let value;
+                    if (plotType === 'energy') {
+                        value = frame.e;
+                    } else if (frame.geovalues && frame.geovalues[plotType] !== undefined) {
+                        value = frame.geovalues[plotType];
+                    } else {
+                        return null;
+                    }
+                    return {
+                        step: frame.s,
+                        value: value
+                    };
+                }).filter(item => item !== null);
+
+                if (data.length === 0) return null;
+
+                // 计算y轴的最小值和最大值
+                minY = Math.min(...data.map(d => d.value));
+                maxY = Math.max(...data.map(d => d.value));
+
+                const trace = {
+                    x: data.map(d => d.step),
+                    y: data.map(d => d.value),
+                    mode: 'lines+markers',
+                    type: 'scatter',
+                    name: plotTitles[plotType],
+                    line: {
+                        color: colorScheme[plotType],
+                        width: 2,
+                        shape: 'spline'
+                    },
+                    marker: {
+                        size: 6,
+                        color: colorScheme[plotType],
+                        symbol: 'circle'
+                    }
+                };
+
+                const traceHighlight = {
+                    x: [data[currentStep].step],
+                    y: [data[currentStep].value],
+                    mode: 'markers',
+                    type: 'scatter',
+                    name: '当前步骤',
+                    marker: {
+                        size: 12,
+                        color: 'blue',
+                        symbol: 'circle',
+                        line: {
+                            color: 'blue',
+                            width: 2
+                        }
+                    },
+                    hoverinfo: 'none'
+                };
+
+                return {
+                    data: [trace, traceHighlight],
+                    title: plotTitles[plotType]
+                };
+            }
+
+            /**
+             * 创建图表的函数
+             */
+            function createPlot() {
+                const plotData = createPlotData(currentPlotType);
+                if (!plotData) return;
+
+                // 单一图表类型的布局
+                const layout = {
+                    margin: { t: 10, r: 30, l: 60, b: 40 },
+                    xaxis: {
+                        title: '步骤',
+                        tickmode: 'linear',
+                        gridcolor: '#ddd',
+                        zerolinecolor: '#ddd'
+                    },
+                    yaxis: {
+                        title: yAxisTitles[currentPlotType],
+                        gridcolor: '#ddd',
+                        zerolinecolor: '#ddd',
+                        autorange: isAutoScale,
+                        range: isAutoScale ? undefined : [minY, maxY]
+                    },
+                    plot_bgcolor: '#ffffff',
+                    paper_bgcolor: '#ffffff',
+                    hovermode: 'closest',
+                    showlegend: false
+                };
+
+                const config = {
+                    responsive: true,
+                    displayModeBar: false
+                };
+
+                Plotly.newPlot('energy-chart', plotData.data, layout, config);
+
+                // 添加点击事件处理
+                document.getElementById('energy-chart').on('plotly_click', function(data) {
+                    if (data.points.length > 0) {
+                        const clickedPoint = data.points[0];
+                        const step = Math.round(clickedPoint.x);
+                        if(step >= 0 && step < trajectoryData.frames.length) {
+                            currentStep = step;
+                            displayMolecule(step);
+                        }
+                    }
+                });
+            }
+
+            window.updatePlot = function(plotType) {
+                // 更新当前图表类型
+                currentPlotType = plotType;
+                
+                // 定义渐变样式
+                const defaultGradient = 'linear-gradient(135deg, #6366f1, #4f46e5)';
+                const activeGradient = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                
+                // 移除所有按钮的 active 类和样式
+                document.querySelectorAll('.plot-button').forEach(button => {
+                    button.classList.remove('active');
+                    button.style.background = defaultGradient;
+                    button.style.backgroundImage = defaultGradient;
+                    // 重置其他样式
+                    button.style.transform = '';
+                    button.style.boxShadow = '';
+                });
+                
+                // 为当前选中的按钮添加 active 类和样式
+                const currentButton = document.querySelector(`.plot-button[data-plot-type="${plotType}"]`);
+                if (currentButton) {
+                    currentButton.classList.add('active');
+                    currentButton.style.background = activeGradient;
+                    currentButton.style.backgroundImage = activeGradient;
+                    // 可以添加其他活动状态的样式
+                    currentButton.style.boxShadow = '0 4px 6px -1px rgba(220, 38, 38, 0.2)';
+                }
+
+                createPlot();
+            }
+
+            // 添加悬浮效果
+            document.querySelectorAll('.plot-button').forEach(button => {
+                button.addEventListener('mouseover', function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.transform = 'translateY(-2px)';
+                        this.style.boxShadow = '0 4px 6px -1px rgba(79, 70, 229, 0.2)';
+                    }
+                });
+                
+                button.addEventListener('mouseout', function() {
+                    if (!this.classList.contains('active')) {
+                        this.style.transform = '';
+                        this.style.boxShadow = '';
+                    }
+                });
+            });
+
+        // 设置按钮点击事件
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM Content Loaded'); // 调试日志
+            
+            const buttons = document.querySelectorAll('.plot-button');
+            console.log('Found buttons on load:', buttons.length); // 调试日志
+            
+            buttons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const plotType = this.getAttribute('data-plot-type');
+                    console.log('Button clicked:', plotType); // 调试日志
+                    updatePlot(plotType);
+                });
+            });
+
+            // 默认选中能量按钮
+            const defaultButton = document.querySelector('.plot-button[data-plot-type="energy"]');
+            if (defaultButton) {
+                defaultButton.classList.add('active');
+                updatePlot('energy');
+            }
+        });
+
+            // 页面加载时激活默认按钮（如果有的话）
+            document.addEventListener('DOMContentLoaded', () => {
+                // 假设 'energy' 是默认选中的图表类型
+                const defaultButton = document.querySelector(`.plot-button[onclick="updatePlot('energy')"]`);
+                if (defaultButton) {
+                    defaultButton.classList.add('active');
+                }
+            });
+            /**
+             * 初始化3Dmol查看器
+             */
+            function initViewer() {
+                const element = $('#viewer');
+                const config = {
+                    backgroundColor: 'white' // 更改背景颜色为白色
+                };
+                viewer = $3Dmol.createViewer(element, config);
+                setViewerStyle();
+                viewer.render();
+            }
+
+            /**
+             * 设置3Dmol查看器的样式
+             */
+            function setViewerStyle() {
+                if (viewer) {
+                    viewer.setStyle({}, {
+                        stick: { radius: 0.15, colorscheme: 'Jmol' }, // 使用更适合白色背景的颜色方案
+                        sphere: { radius: 0.4 }
+                    });
+                    viewer.zoomTo();
+                }
+            }
+
+            /**
+             * 将坐标数组转换为XYZ格式的字符串
+             * @param {Object} frame - 包含x, y, z坐标和步骤信息的帧数据
+             * @returns {string} XYZ格式的字符串
+             */
+            function convertToXYZ(frame) {
+                const numAtoms = frame.x.length;
+                const atomSymbols = frame.a || trajectoryData.frames[0].a; // 使用第一帧的原子符号
+
+                let xyzString = `${numAtoms}\nStep ${frame.s}\n`;
+                for (let i = 0; i < numAtoms; i++) {
+                    xyzString += `${atomSymbols[i]} ${frame.x[i]} ${frame.y[i]} ${frame.z[i]}\n`;
+                }
+                return xyzString;
+            }
+
+            /**
+             * 保存视图状态
+             * @returns {Object|null} 视图状态
+             */
+            function saveViewerState() {
+                if (viewer) {
+                    return viewer.getView();
+                }
+                return null;
+            }
+
+            /**
+             * 恢复视图状态
+             * @param {Object} state - 视图状态
+             */
+            function restoreViewerState(state) {
+                if (viewer && state) {
+                    viewer.setView(state);
+                    viewer.render();
+                }
+            }
+
+            /**
+             * 显示指定步骤的分子结构
+             * @param {number} step - 当前步骤
+             */
+            function displayMolecule(step) {
+                if (!viewer || isLoading || !trajectoryData) return;
+
+                try {
+                    isLoading = true;
+                    showLoadingIndicator(true);
+
+                    const frame = trajectoryData.frames[step];
+                    const xyzData = convertToXYZ(frame);
+
+                    // 保存当前视图状态
+                    viewerState = saveViewerState();
+
+                    viewer.clear();
+                    viewer.addModel(xyzData, "xyz");
+                    setViewerStyle();
+                    viewer.zoomTo();
+                    viewer.render();
+
+                    // 恢复视图状态
+                    restoreViewerState(viewerState);
+
+                    updateInfoPanel(step);
+                    document.getElementById('step-slider').value = step;
+                    highlightCurrentPoint(step);
+                } catch (error) {
+                    console.error('Error displaying molecule:', error);
+                } finally {
+                    isLoading = false;
+                    showLoadingIndicator(false);
+                }
+            }
+
+            /**
+             * 创建图表
+             */
+            function loadAndCreatePlot() {
+                createPlot();
+            }
+
+            /**
+             * 更新信息面板
+             * @param {number} step - 当前步骤
+             */
+            function updateInfoPanel(step) {
+                document.getElementById('step-value').textContent = step;
+                const frame = trajectoryData.frames[step];
+                if (frame) {
+                    document.getElementById('energy-value').textContent = 
+                        frame.e.toFixed(6) + ' Hartree'; // 更改单位为Hartree
+                    document.getElementById('max_force-value').textContent = 
+                        (frame.geovalues && frame.geovalues.max_force !== undefined ? frame.geovalues.max_force.toFixed(6) : 'N/A') + ' Hartree/Bohr';
+                    document.getElementById('rms_force-value').textContent = 
+                        (frame.geovalues && frame.geovalues.rms_force !== undefined ? frame.geovalues.rms_force.toFixed(6) : 'N/A') + ' Hartree/Bohr';
+                    document.getElementById('max_disp-value').textContent = 
+                        (frame.geovalues && frame.geovalues.max_disp !== undefined ? frame.geovalues.max_disp.toFixed(6) : 'N/A') + ' Bohr';
+                    document.getElementById('rms_disp-value').textContent = 
+                        (frame.geovalues && frame.geovalues.rms_disp !== undefined ? frame.geovalues.rms_disp.toFixed(6) : 'N/A') + ' Bohr';
+                }
+            }
+
+            /**
+             * 高亮当前步骤的点
+             * @param {number} step - 当前步骤
+             */
+            function highlightCurrentPoint(step) {
+                const plotData = createPlotData(currentPlotType);
+                if (!plotData) return;
+
+                // 更新高亮点的坐标
+                Plotly.restyle('energy-chart', {
+                    x: [[plotData.data[1].x[0]]],
+                    y: [[plotData.data[1].y[0]]]
+                }, [1]);
+
+                // 更新高亮点的位置
+                Plotly.restyle('energy-chart', {
+                    x: [[plotData.data[0].x[step]]],
+                    y: [[plotData.data[0].y[step]]]
+                }, [1]);
+
+                if(isAutoScale){
+                    Plotly.relayout('energy-chart', {
+                        'yaxis.autorange': true
+                    });
+                }
+            }
+
+            /**
+             * 显示或隐藏加载指示器
+             * @param {boolean} show - 是否显示
+             */
+            function showLoadingIndicator(show) {
+                const indicator = document.getElementById('loading-indicator');
+                if (show) {
+                    indicator.style.display = 'inline';
+                } else {
+                    indicator.style.display = 'none';
+                }
+            }
+
+            /**
+             * 加载轨迹数据
+             */
+            async function loadTrajectoryData() {
+                try {
+                    const response = await fetch(TRAJECTORY_URL);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    trajectoryData = await response.json();
+                    // 设置滑动条的最大值
+                    document.getElementById('step-slider').max = trajectoryData.frames.length - 1;
+                    loadAndCreatePlot();
+                    displayMolecule(0);
+                } catch (error) {
+                    console.error('Error loading trajectory data:', error);
+                    showLoadingIndicator(false);
+                    document.getElementById('loading-indicator').textContent = '数据加载失败';
+                    // 可选：显示弹窗或其他用户友好的提示
+                }
+            }
+
+            /**
+             * 播放优化过程（循环播放）
+             */
+            function playOptimization() {
+                if (isPlaying) return;
+                isPlaying = true;
+                document.getElementById('play-pause-button').textContent = '暂停';
+                disableControlButtons(true);
+                playInterval = setInterval(() => {
+                    if(currentStep < trajectoryData.frames.length -1){
+                        currentStep++;
+                    } else {
+                        currentStep = 0; // 循环到第一步
+                    }
+                    displayMolecule(currentStep);
+                }, playbackSpeed);
+            }
+
+            /**
+             * 暂停优化过程
+             */
+            function pauseOptimization() {
+                if (!isPlaying) return;
+                isPlaying = false;
+                document.getElementById('play-pause-button').textContent = '播放';
+                clearInterval(playInterval);
+                disableControlButtons(false);
+            }
+
+            /**
+             * 切换播放/暂停状态
+             */
+            function togglePlayPause() {
+                if(isPlaying){
+                    pauseOptimization();
+                } else {
+                    playOptimization();
+                }
+            }
+
+            /**
+             * 重置优化过程
+             */
+            function resetOptimization() {
+                pauseOptimization();
+                currentStep = 0;
+                displayMolecule(currentStep);
+            }
+
+            /**
+             * 步进前进一步
+             */
+            function stepForward() {
+                if (currentStep < trajectoryData.frames.length -1) {
+                    currentStep++;
+                } else {
+                    currentStep = 0; // 循环到第一步
+                }
+                displayMolecule(currentStep);
+            }
+
+            /**
+             * 步进后退一步
+             */
+            function stepBackward() {
+                if (currentStep > 0) {
+                    currentStep--;
+                } else {
+                    currentStep = trajectoryData.frames.length -1; // 循环到最后一步
+                }
+                displayMolecule(currentStep);
+            }
+
+            /**
+             * 设置播放速度
+             * @param {number} speed - 播放速度（毫秒）
+             */
+            function setPlaybackSpeed(speed) {
+                playbackSpeed = speed;
+                if(isPlaying){
+                    pauseOptimization();
+                    playOptimization();
+                }
+            }
+
+            /**
+             * 切换自动缩放状态
+             */
+            function toggleAutoScale() {
+                isAutoScale = !isAutoScale;
+                const button = document.getElementById('toggle-autoscale-button');
+                if(isAutoScale){
+                    button.textContent = '关闭自动缩放';
+                    Plotly.relayout('energy-chart', {
+                        'yaxis.autorange': true
+                    });
+                } else {
+                    button.textContent = '开启自动缩放';
+                    Plotly.relayout('energy-chart', {
+                        'yaxis.autorange': false,
+                        'yaxis.range': [minY, maxY]
+                    });
+                }
+            }
+
+            /**
+             * 禁用或启用控制按钮
+             * @param {boolean} disable - 是否禁用
+             */
+            function disableControlButtons(disable) {
+                document.getElementById('step-back-button').disabled = disable;
+                document.getElementById('step-forward-button').disabled = disable;
+                document.getElementById('reset-button').disabled = disable;
+                document.getElementById('toggle-autoscale-button').disabled = disable;
+                document.getElementById('speed-input').disabled = disable;
+                document.getElementById('step-slider').disabled = disable;
+            }
+
+            /**
+             * 页面加载完成后初始化
+             */
+            window.addEventListener('load', async () => {
+                await initViewer();
+                await loadTrajectoryData();
+
+                // 初始化后立即调用 zoomTo
+                if (viewer) {
+                    viewer.zoomTo();
+                    viewer.render();
+                }
+
+                // 绑定控制按钮事件
+                document.getElementById('play-pause-button').addEventListener('click', togglePlayPause);
+                document.getElementById('reset-button').addEventListener('click', resetOptimization);
+                document.getElementById('step-forward-button').addEventListener('click', stepForward);
+                document.getElementById('step-back-button').addEventListener('click', stepBackward);
+                document.getElementById('step-slider').addEventListener('input', (event) => {
+                    const step = parseInt(event.target.value);
+                    if(!isNaN(step)){
+                        currentStep = step;
+                        displayMolecule(step);
+                    }
+                });
+                document.getElementById('speed-input').addEventListener('change', (event) => {
+                    let speed = parseInt(event.target.value);
+                    if(isNaN(speed) || speed < MIN_PLAYBACK_SPEED){
+                        speed = MIN_PLAYBACK_SPEED;
+                        event.target.value = speed;
+                    }
+                    setPlaybackSpeed(speed);
+                });
+
+                // 绑定自动缩放按钮
+                document.getElementById('toggle-autoscale-button').addEventListener('click', toggleAutoScale);
+            });
+        })();
+    </script>
+</body>
+</html>
