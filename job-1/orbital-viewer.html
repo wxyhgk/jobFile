@@ -166,13 +166,40 @@
     </div>
 
     <script>
+        // 全局数据对象
         let orbitalData = {
             energies: [],
             homoIndex: null,
             lumoIndex: null
         };
         
-        // 更新绘图函数，完全重绘而不是更新
+        // 处理下拉选择变化
+        function handleSelectChange(orbitalId) {
+            const select = document.getElementById(`${orbitalId}-select`);
+            const input = document.getElementById(orbitalId);
+            
+            switch(select.value) {
+                case 'HOMO':
+                    input.value = orbitalData.homoIndex;
+                    break;
+                case 'LUMO':
+                    input.value = orbitalData.lumoIndex;
+                    break;
+                case 'HOMO-1':
+                    input.value = orbitalData.homoIndex - 1;
+                    break;
+                case 'LUMO+1':
+                    input.value = orbitalData.lumoIndex + 1;
+                    break;
+                case 'custom':
+                    input.value = '';
+                    break;
+            }
+            
+            updateCalculations();
+        }
+        
+        // 更新图表
         function updatePlot(index1, index2) {
             // 基础轨道能量曲线
             const allOrbitalTrace = {
@@ -186,7 +213,7 @@
                 },
                 hovertemplate: 'Orbital: %{x}<br>Energy: %{y:.4f} eV<extra></extra>'
             };
-
+        
             // 特殊轨道标记（HOMO, LUMO等）
             const specialOrbitalTrace = {
                 x: [orbitalData.homoIndex-1, orbitalData.homoIndex, orbitalData.lumoIndex, orbitalData.lumoIndex+1],
@@ -206,7 +233,7 @@
                 textposition: 'top',
                 hovertemplate: '%{text}<br>Energy: %{y:.4f} eV<extra></extra>'
             };
-
+        
             // 选中的轨道
             const selectedPoints = {
                 x: [],
@@ -221,19 +248,19 @@
                 textposition: 'top',
                 hovertemplate: '%{text}<br>Energy: %{y:.4f} eV<extra></extra>'
             };
-
+        
             if (index1 !== null && index1 >= 0 && index1 < orbitalData.energies.length) {
                 selectedPoints.x.push(index1);
                 selectedPoints.y.push(orbitalData.energies[index1]);
                 selectedPoints.text.push(`Orbital ${index1}`);
             }
-
+        
             if (index2 !== null && index2 >= 0 && index2 < orbitalData.energies.length) {
                 selectedPoints.x.push(index2);
                 selectedPoints.y.push(orbitalData.energies[index2]);
                 selectedPoints.text.push(`Orbital ${index2}`);
             }
-
+        
             // 计算视图范围
             const xRange = [
                 Math.min(orbitalData.homoIndex - 2, ...selectedPoints.x),
@@ -250,7 +277,7 @@
                 Math.min(...yValues) - 0.5,
                 Math.max(...yValues) + 0.5
             ];
-
+        
             const layout = {
                 title: 'Orbital Energy Levels',
                 xaxis: {
@@ -276,7 +303,7 @@
                     b: 50
                 }
             };
-
+        
             const config = {
                 responsive: true,
                 displayModeBar: true,
@@ -290,7 +317,7 @@
                     scale: 2
                 }
             };
-
+        
             // 完全重绘图表
             Plotly.newPlot('plot', 
                 [allOrbitalTrace, specialOrbitalTrace, selectedPoints], 
@@ -299,6 +326,7 @@
             );
         }
         
+        // 加载数据
         async function loadOrbitalData() {
             try {
                 const energiesResponse = await fetch('orbitals.txt');
@@ -312,6 +340,7 @@
                 
                 updateReferenceInfo();
                 
+                // 设置初始值
                 document.getElementById('orbital1').value = orbitalData.lumoIndex;
                 document.getElementById('orbital2').value = orbitalData.homoIndex;
                 
@@ -321,6 +350,7 @@
             }
         }
         
+        // 更新参考信息
         function updateReferenceInfo() {
             ['1', '2'].forEach(suffix => {
                 document.getElementById(`homo-index${suffix}`).textContent = orbitalData.homoIndex;
@@ -328,12 +358,14 @@
             });
         }
         
+        // 获取轨道索引
         function getOrbitalIndex(orbitalInput) {
             if (!orbitalInput) return null;
             const index = parseInt(orbitalInput);
             return isNaN(index) ? null : index;
         }
         
+        // 更新计算结果
         function updateCalculations() {
             const orbital1 = document.getElementById('orbital1').value;
             const orbital2 = document.getElementById('orbital2').value;
@@ -341,6 +373,7 @@
             const index1 = getOrbitalIndex(orbital1);
             const index2 = getOrbitalIndex(orbital2);
             
+            // 更新能量显示
             if (index1 !== null && index1 >= 0 && index1 < orbitalData.energies.length) {
                 const energy1 = orbitalData.energies[index1];
                 document.getElementById('energy1').textContent = `Energy: ${energy1.toFixed(4)} eV`;
@@ -351,187 +384,35 @@
                 document.getElementById('energy2').textContent = `Energy: ${energy2.toFixed(4)} eV`;
             }
             
+            // 计算能隙
             if (index1 !== null && index2 !== null) {
                 const gap = Math.abs(orbitalData.energies[index1] - orbitalData.energies[index2]);
                 document.getElementById('gap-value').textContent = `${gap.toFixed(4)} eV`;
             }
             
+            // 更新图表
             updatePlot(index1, index2);
         }
         
-        function initializePlot() {
-            const allOrbitalTrace = {
-                x: Array.from({length: orbitalData.energies.length}, (_, i) => i),
-                y: orbitalData.energies,
-                mode: 'lines',
-                name: 'All Orbitals',
-                line: {
-                    color: '#2196f3',
-                    width: 2
-                },
-                hovertemplate: 'Orbital: %{x}<br>Energy: %{y:.4f} eV<extra></extra>'
-            };
-
-            const layout = {
-                title: 'Orbital Energy Levels',
-                xaxis: {
-                    title: 'Orbital Index',
-                    showgrid: true,
-                    gridcolor: '#f0f0f0'
-                },
-                yaxis: {
-                    title: 'Energy (eV)',
-                    showgrid: true,
-                    gridcolor: '#f0f0f0'
-                },
-                hovermode: 'closest',
-                showlegend: true,
-                plot_bgcolor: 'white',
-                paper_bgcolor: 'white',
-                margin: {
-                    l: 60,
-                    r: 30,
-                    t: 50,
-                    b: 50
-                }
-            };
-
-            const config = {
-                responsive: true,
-                displayModeBar: true,
-                displaylogo: false,
-                modeBarButtonsToAdd: ['drawline', 'drawopenpath', 'eraseshape'],
-                toImageButtonOptions: {
-                    format: 'png',
-                    filename: 'orbital_energy_plot',
-                    height: 800,
-                    width: 1200,
-                    scale: 2
-                }
-            };
-
-            Plotly.newPlot('plot', [allOrbitalTrace], layout, config);
-        }
-        
-        function updatePlot(index1, index2) {
-            // 创建选中轨道的数据点
-            const selectedPoints = {
-                x: [],
-                y: [],
-                text: [],
-                mode: 'markers+text',
-                name: 'Selected Orbitals',
-                marker: {
-                    size: 10,
-                    color: '#f44336'
-                },
-                textposition: 'top',
-                hovertemplate: '%{text}<br>Energy: %{y:.4f} eV<extra></extra>'
-            };
-
-            if (index1 !== null && index1 >= 0 && index1 < orbitalData.energies.length) {
-                selectedPoints.x.push(index1);
-                selectedPoints.y.push(orbitalData.energies[index1]);
-                selectedPoints.text.push(`Orbital ${index1}`);
-            }
-
-            if (index2 !== null && index2 >= 0 && index2 < orbitalData.energies.length) {
-                selectedPoints.x.push(index2);
-                selectedPoints.y.push(orbitalData.energies[index2]);
-                selectedPoints.text.push(`Orbital ${index2}`);
-            }
-
-            Plotly.update('plot', {}, {}, [1]);  // 移除旧的选中点
-            if (selectedPoints.x.length > 0) {
-                Plotly.addTraces('plot', selectedPoints);
-            }
-        }
-        
+        // 显示错误信息
         function showError(message) {
             const errorElement = document.getElementById('error-message');
             errorElement.textContent = message;
             errorElement.style.display = 'block';
         }
         
-        // 添加事件监听器
-        document.getElementById('orbital1').addEventListener('input', updateCalculations);
-        document.getElementById('orbital2').addEventListener('input', updateCalculations);
-                function handleSelectChange(orbitalId) {
-            const select = document.getElementById(`${orbitalId}-select`);
-            const input = document.getElementById(orbitalId);
+        // 初始化函数
+        function initializeApp() {
+            // 添加事件监听器
+            document.getElementById('orbital1').addEventListener('input', updateCalculations);
+            document.getElementById('orbital2').addEventListener('input', updateCalculations);
             
-            switch(select.value) {
-                case 'HOMO':
-                    input.value = orbitalData.homoIndex;
-                    break;
-                case 'LUMO':
-                    input.value = orbitalData.lumoIndex;
-                    break;
-                case 'HOMO-1':
-                    input.value = orbitalData.homoIndex - 1;
-                    break;
-                case 'LUMO+1':
-                    input.value = orbitalData.lumoIndex + 1;
-                    break;
-                case 'custom':
-                    input.value = '';
-                    break;
-            }
-            
-            updateCalculations();
+            // 加载数据
+            loadOrbitalData();
         }
         
-        function updateReferenceInfo() {
-            ['1', '2'].forEach(suffix => {
-                document.getElementById(`homo-index${suffix}`).textContent = orbitalData.homoIndex;
-                document.getElementById(`lumo-index${suffix}`).textContent = orbitalData.lumoIndex;
-            });
-        }
-        
-        function getOrbitalIndex(orbitalInput) {
-            if (!orbitalInput) return null;
-            const index = parseInt(orbitalInput);
-            return isNaN(index) ? null : index;
-        }
-        
-        function updateCalculations() {
-            const orbital1 = document.getElementById('orbital1').value;
-            const orbital2 = document.getElementById('orbital2').value;
-            
-            const index1 = getOrbitalIndex(orbital1);
-            const index2 = getOrbitalIndex(orbital2);
-            
-            if (index1 !== null && index1 >= 0 && index1 < orbitalData.energies.length) {
-                const energy1 = orbitalData.energies[index1];
-                document.getElementById('energy1').textContent = `Energy: ${energy1.toFixed(4)} eV`;
-            }
-            
-            if (index2 !== null && index2 >= 0 && index2 < orbitalData.energies.length) {
-                const energy2 = orbitalData.energies[index2];
-                document.getElementById('energy2').textContent = `Energy: ${energy2.toFixed(4)} eV`;
-            }
-            
-            if (index1 !== null && index2 !== null) {
-                const gap = Math.abs(orbitalData.energies[index1] - orbitalData.energies[index2]);
-                document.getElementById('gap-value').textContent = `${gap.toFixed(4)} eV`;
-            }
-            
-            updatePlot(index1, index2);
-        }
-        
-        function showError(message) {
-            const errorElement = document.getElementById('error-message');
-            errorElement.textContent = message;
-            errorElement.style.display = 'block';
-        }
-        
-        // 添加事件监听器
-        document.getElementById('orbital1').addEventListener('input', updateCalculations);
-        document.getElementById('orbital2').addEventListener('input', updateCalculations);
-        
-        // 初始加载数据
-        // 初始加载数据
-        loadOrbitalData();
+        // 当页面加载完成时初始化应用
+        document.addEventListener('DOMContentLoaded', initializeApp);
     </script>
 </body>
 </html>
