@@ -263,8 +263,8 @@
         
             // 计算视图范围
             const xRange = [
-                Math.min(orbitalData.homoIndex - 2, ...selectedPoints.x),
-                Math.max(orbitalData.lumoIndex + 2, ...selectedPoints.x)
+                Math.min(orbitalData.homoIndex - 4, ...selectedPoints.x),
+                Math.max(orbitalData.lumoIndex + 4, ...selectedPoints.x)
             ];
             const yValues = [
                 orbitalData.energies[orbitalData.homoIndex - 1],
