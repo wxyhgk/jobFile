@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>激发态分析</title>
+    <meta charset="UTF-8">
+    <style>
+      :root {
+          --primary-color: #2563eb;
+          --primary-hover: #1d4ed8;
+          --bg-color: #f1f5f9;
+          --card-bg: #ffffff;
+          --text-color: #1e293b;
+          --border-color: #e2e8f0;
+          
+          /* 响应式基础字体大小 */
+          --base-font-size: clamp(14px, 2.5vw, 16px);
+          --small-font-size: clamp(12px, 2vw, 14px);
+          --title-font-size: clamp(18px, 3vw, 24px);
+          
+          /* 响应式间距 */
+          --container-padding: clamp(12px, 3vw, 20px);
+          --section-gap: clamp(20px, 4vw, 32px);
+          --card-padding: clamp(12px, 3vw, 24px);
+      }
+
+      * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+      }
+
+      html {
+          font-size: var(--base-font-size);
+      }
+
+      body {
+          font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: var(--container-padding);
+          background-color: var(--bg-color);
+          color: var(--text-color);
+          line-height: 1.5;
+          overflow-x: hidden;
+          font-size: 1rem;
+      }
+
+      .container {
+          background-color: var(--card-bg);
+          padding: var(--card-padding);
+          border-radius: 12px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+          width: 100%;
+      }
+
+      .header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: var(--section-gap);
+          flex-wrap: wrap;
+          gap: 16px;
+      }
+
+      .title {
+          font-size: var(--title-font-size);
+          font-weight: 700;
+          color: var(--text-color);
+      }
+
+      .controls {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: clamp(12px, 2vw, 20px);
+          margin-bottom: var(--section-gap);
+          padding: clamp(12px, 2vw, 16px);
+          background-color: var(--bg-color);
+          border-radius: 8px;
+          width: 100%;
+      }
+
+      .control-group {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-width: 0;
+      }
+
+      label {
+          font-weight: 600;
+          color: var(--text-color);
+          font-size: var(--small-font-size);
+      }
+
+      select {
+          padding: 8px 12px;
+          border-radius: 6px;
+          border: 1px solid var(--border-color);
+          background-color: var(--card-bg);
+          font-size: var(--small-font-size);
+          transition: all 0.2s;
+          width: 100%;
+      }
+
+      select:hover {
+          border-color: var(--primary-color);
+      }
+
+      select:focus {
+          outline: none;
+          border-color: var(--primary-color);
+          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+      }
+
+      .section {
+          margin-bottom: var(--section-gap);
+      }
+
+      .section-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: clamp(12px, 2vw, 16px);
+          flex-wrap: wrap;
+          gap: 12px;
+      }
+
+      .section-title {
+          font-size: var(--title-font-size);
+          font-weight: 600;
+          color: var(--text-color);
+      }
+
+      .table-container {
+          width: 100%;
+          overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
+          margin-bottom: 20px;
+          border-radius: 8px;
+          position: relative;
+      }
+
+      /* 新增：确保表格横向滚动时表头保持固定 */
+      .table-container table {
+          position: relative;
+      }
+
+      .table-container thead {
+          position: sticky;
+          top: 0;
+          z-index: 1;
+      }
+
+      table {
+          width: 100%;
+          border-collapse: separate;
+          border-spacing: 0;
+          font-size: var(--small-font-size);
+      }
+
+      th, td {
+          padding: clamp(6px, 1.5vw, 12px) clamp(8px, 2vw, 16px);
+          text-align: left;
+          border-bottom: 1px solid var(--border-color);
+          min-width: 100px; /* 设置最小宽度确保内容可读性 */
+      }
+
+      /* 调整表格单元格内容的缩放行为 */
+      th, td {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          font-size: inherit; /* 继承表格的字体大小 */
+      }
+
+      th {
+          background-color: var(--primary-color);
+          color: white;
+          font-weight: 600;
+          padding-top: clamp(8px, 1.5vw, 12px);
+          padding-bottom: clamp(8px, 1.5vw, 12px);
+      }
+
+      tr:last-child td {
+          border-bottom: none;
+      }
+
+      tr:nth-child(even) {
+          background-color: var(--bg-color);
+      }
+
+      .button {
+          padding: clamp(6px, 1.5vw, 8px) clamp(12px, 2vw, 16px);
+          border-radius: 6px;
+          border: none;
+          background-color: var(--primary-color);
+          color: white;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: var(--small-font-size);
+          white-space: nowrap;
+      }
+
+      .button:hover {
+          background-color: var(--primary-hover);
+      }
+
+      .button svg {
+          width: 1em;
+          height: 1em;
+      }
+
+      .lang-switch {
+          background-color: var(--bg-color);
+          color: var(--text-color);
+      }
+
+      .copy-success {
+          position: fixed;
+          top: 20px;
+          right: 20px;
+          padding: 12px 24px;
+          background-color: #10b981;
+          color: white;
+          border-radius: 6px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          display: none;
+          z-index: 1000;
+          font-size: var(--small-font-size);
+      }
+
+      /* 响应式调整 */
+      @media screen and (max-width: 768px) {
+          .header {
+              flex-direction: column;
+              align-items: flex-start;
+          }
+
+          .controls {
+              grid-template-columns: 1fr;
+          }
+
+          .section-header {
+              flex-direction: column;
+              align-items: flex-start;
+          }
+          
+          /* 调整表格在移动端的显示 */
+          table {
+              font-size: calc(var(--small-font-size) * 0.9);
+          }
+      }
+
+      @media screen and (max-width: 480px) {
+          .button {
+              width: 100%;
+              justify-content: center;
+          }
+
+          /* 进一步缩小表格字体 */
+          table {
+              font-size: calc(var(--small-font-size) * 0.85);
+          }
+
+          th, td {
+              min-width: 80px;
+          }
+      }
+
+      /* 深色模式 */
+      @media (prefers-color-scheme: dark) {
+          :root {
+              --bg-color: #1a1a1a;
+              --card-bg: #2d2d2d;
+              --text-color: #e5e5e5;
+              --border-color: #404040;
+          }
+      }
+
+      /* 打印样式 */
+      @media print {
+          body {
+              background: none;
+              padding: 0;
+              font-size: 12pt;
+          }
+
+          .container {
+              box-shadow: none;
+          }
+
+          .button,
+          .controls {
+              display: none;
+          }
+
+          table {
+              font-size: 10pt;
+          }
+      }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>激发态分析</h1>
+        
+        <div class="controls">
+            <div>
+                <label for="iteration-select">迭代次数：</label>
+                <select id="iteration-select" onchange="updateDisplay()">
+                    <option value="1">迭代 1</option>
+<option value="2">迭代 2</option>
+<option value="3">迭代 3</option>
+<option value="4">迭代 4</option>
+<option value="5">迭代 5</option>
+<option value="6">迭代 6</option>
+<option value="7">迭代 7</option>
+<option value="8">迭代 8</option>
+<option value="9">迭代 9</option>
+<option value="10">迭代 10</option>
+<option value="11">迭代 11</option>
+<option value="12">迭代 12</option>
+<option value="13">迭代 13</option>
+<option value="14">迭代 14</option>
+<option value="15">迭代 15</option>
+                </select>
+            </div>
+            <div>
+                <label for="state-select">激发态：</label>
+                <select id="state-select" onchange="updateDisplay()">
+                    <option value="1">激发态 1</option>
+<option value="2">激发态 2</option>
+<option value="3">激发态 3</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="state-details"></div>
+    </div>
+
+    <script>
+        const statesData = [
+  {
+    "iteration": 1,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 4.4673,
+        "wavelength": 277.53,
+        "oscillator_strength": 0.0718,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.04228
+          },
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.94944
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.9242,
+        "wavelength": 251.79,
+        "oscillator_strength": 0.5042,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.95383
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 6.0014,
+        "wavelength": 206.59,
+        "oscillator_strength": 0.0836,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "41 -> 45",
+            "probability": 0.08814
+          },
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.24219
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.06702
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.37508
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.19094
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 2,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 4.045,
+        "wavelength": 306.51,
+        "oscillator_strength": 0.0728,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.02742
+          },
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.96719
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.7633,
+        "wavelength": 260.29,
+        "oscillator_strength": 0.4935,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.95634
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.7957,
+        "wavelength": 213.92,
+        "oscillator_strength": 0.1048,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "41 -> 45",
+            "probability": 0.02309
+          },
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.05352
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.19694
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.06263
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.64044
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 3,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.8714,
+        "wavelength": 320.26,
+        "oscillator_strength": 0.0688,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.02127
+          },
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.97424
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.7055,
+        "wavelength": 263.49,
+        "oscillator_strength": 0.4963,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.95803
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6981,
+        "wavelength": 217.59,
+        "oscillator_strength": 0.0809,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.19443
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.75252
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 4,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.7605,
+        "wavelength": 329.7,
+        "oscillator_strength": 0.061,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.97874
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.6713,
+        "wavelength": 265.42,
+        "oscillator_strength": 0.4955,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96094
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6349,
+        "wavelength": 220.03,
+        "oscillator_strength": 0.0576,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.12815
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.84131
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 5,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.7115,
+        "wavelength": 334.05,
+        "oscillator_strength": 0.0564,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.98025
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.6263,
+        "wavelength": 268.0,
+        "oscillator_strength": 0.4899,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96419
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6357,
+        "wavelength": 220.0,
+        "oscillator_strength": 0.0782,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.16723
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.80267
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 6,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.6701,
+        "wavelength": 337.82,
+        "oscillator_strength": 0.0511,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.98162
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.5796,
+        "wavelength": 270.73,
+        "oscillator_strength": 0.4876,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96794
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6445,
+        "wavelength": 219.65,
+        "oscillator_strength": 0.1005,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.02533
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.21837
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.71892
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 7,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.671,
+        "wavelength": 337.74,
+        "oscillator_strength": 0.0502,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.98193
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.5868,
+        "wavelength": 270.3,
+        "oscillator_strength": 0.4955,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96825
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6404,
+        "wavelength": 219.82,
+        "oscillator_strength": 0.0762,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.07136
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.16863
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.04074
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.69658
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 8,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.6573,
+        "wavelength": 339.0,
+        "oscillator_strength": 0.0499,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.98227
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.5944,
+        "wavelength": 269.86,
+        "oscillator_strength": 0.4813,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96794
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6353,
+        "wavelength": 220.01,
+        "oscillator_strength": 0.0989,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.23534
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.19046
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.11286
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.43
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 9,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.682,
+        "wavelength": 336.73,
+        "oscillator_strength": 0.0516,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.98162
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.6141,
+        "wavelength": 268.71,
+        "oscillator_strength": 0.4988,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96677
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6339,
+        "wavelength": 220.07,
+        "oscillator_strength": 0.0583,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.03042
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.12157
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.80879
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 10,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.6762,
+        "wavelength": 337.26,
+        "oscillator_strength": 0.0513,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.98176
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.6121,
+        "wavelength": 268.82,
+        "oscillator_strength": 0.4933,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96683
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.635,
+        "wavelength": 220.02,
+        "oscillator_strength": 0.0678,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.05371
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.13647
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.0318
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.75751
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 11,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.6733,
+        "wavelength": 337.53,
+        "oscillator_strength": 0.0511,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.98182
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.609,
+        "wavelength": 269.0,
+        "oscillator_strength": 0.4884,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96688
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6359,
+        "wavelength": 219.99,
+        "oscillator_strength": 0.0732,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.07433
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.14326
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.04189
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.71882
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 12,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.6726,
+        "wavelength": 337.6,
+        "oscillator_strength": 0.051,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.98188
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.6048,
+        "wavelength": 269.25,
+        "oscillator_strength": 0.4856,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.967
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6366,
+        "wavelength": 219.96,
+        "oscillator_strength": 0.0729,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.0826
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.14038
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.04584
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.70893
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 13,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.6718,
+        "wavelength": 337.67,
+        "oscillator_strength": 0.0509,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.9819
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.6031,
+        "wavelength": 269.35,
+        "oscillator_strength": 0.484,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96705
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6367,
+        "wavelength": 219.96,
+        "oscillator_strength": 0.0744,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.09054
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.14206
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.04957
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.69504
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 14,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.6716,
+        "wavelength": 337.69,
+        "oscillator_strength": 0.0508,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.9819
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.6017,
+        "wavelength": 269.43,
+        "oscillator_strength": 0.4832,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96711
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6367,
+        "wavelength": 219.96,
+        "oscillator_strength": 0.0744,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.0941
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.14165
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.05123
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.69003
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "iteration": 15,
+    "excited_states": [
+      {
+        "number": 1,
+        "multiplicity": "Singlet-A",
+        "energy": 3.6716,
+        "wavelength": 337.69,
+        "oscillator_strength": 0.0508,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 45",
+            "probability": 0.9819
+          }
+        ]
+      },
+      {
+        "number": 2,
+        "multiplicity": "Singlet-A",
+        "energy": 4.6017,
+        "wavelength": 269.43,
+        "oscillator_strength": 0.4832,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "44 -> 46",
+            "probability": 0.96711
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "multiplicity": "Singlet-A",
+        "energy": 5.6367,
+        "wavelength": 219.96,
+        "oscillator_strength": 0.0744,
+        "s2_value": 0.0,
+        "transitions": [
+          {
+            "orbital_pair": "42 -> 45",
+            "probability": 0.0941
+          },
+          {
+            "orbital_pair": "43 -> 45",
+            "probability": 0.14165
+          },
+          {
+            "orbital_pair": "43 -> 46",
+            "probability": 0.05123
+          },
+          {
+            "orbital_pair": "44 -> 47",
+            "probability": 0.69003
+          }
+        ]
+      }
+    ]
+  }
+];
+
+        function updateDisplay() {
+            const iterationSelect = document.getElementById('iteration-select');
+            const stateSelect = document.getElementById('state-select');
+            const stateDetails = document.getElementById('state-details');
+
+            const iteration = statesData[iterationSelect.value - 1];
+            const state = iteration.excited_states[stateSelect.value - 1];
+
+            let html = `
+                <div class="excited-state-info">
+                    <h2>状态信息</h2>
+                    <table>
+                        <tr>
+                            <th>属性</th>
+                            <th>值</th>
+                        </tr>
+                        <tr>
+                            <td>多重性</td>
+                            <td>${state.multiplicity}</td>
+                        </tr>
+                        <tr>
+                            <td>能量 (eV)</td>
+                            <td>${state.energy.toFixed(4)}</td>
+                        </tr>
+                        <tr>
+                            <td>波长 (nm)</td>
+                            <td>${state.wavelength.toFixed(2)}</td>
+                        </tr>
+                        <tr>
+                            <td>振子强度</td>
+                            <td>${state.oscillator_strength.toFixed(4)}</td>
+                        </tr>
+                        ${state.s2_value !== null ? `
+                        <tr>
+                            <td>S^2</td>
+                            <td>${state.s2_value.toFixed(4)}</td>
+                        </tr>
+                        ` : ''}
+                    </table>
+                </div>
+
+                <div class="transitions">
+                    <h2>跃迁</h2>
+                    <table>
+                        <tr>
+                            <th>轨道对</th>
+                            <th>概率</th>
+                        </tr>
+                        ${state.transitions.map(t => `
+                        <tr>
+                            <td>${t.orbital_pair}</td>
+                            <td>${t.probability.toFixed(5)}</td>
+                        </tr>
+                        `).join('')}
+                    </table>
+                </div>
+            `;
+
+            stateDetails.innerHTML = html;
+        }
+
+        // 初始化显示
+        updateDisplay();
+    </script>
+</body>
+</html>
