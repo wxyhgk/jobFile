@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Orbital Energy Calculator</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.1/plotly.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -86,7 +86,7 @@
         
         .chart-container {
             margin-top: 20px;
-            height: 400px;
+            height: 500px;
             position: relative;
         }
         
@@ -102,6 +102,14 @@
             border-radius: 4px;
             margin-top: 10px;
             display: none;
+        }
+
+        /* 添加图表工具提示样式 */
+        .plotly-tooltip {
+            background-color: white !important;
+            padding: 8px !important;
+            border-radius: 4px !important;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
         }
     </style>
 </head>
@@ -152,9 +160,7 @@
             <div id="gap-value">Calculating...</div>
         </div>
         
-        <div class="chart-container">
-            <canvas id="energyChart"></canvas>
-        </div>
+        <div id="plot" class="chart-container"></div>
         
         <div class="error" id="error-message"></div>
     </div>
@@ -166,8 +172,6 @@
             lumoIndex: null
         };
         
-        let chart = null;
-
         function handleSelectChange(orbitalId) {
             const select = document.getElementById(`${orbitalId}-select`);
             const input = document.getElementById(orbitalId);
@@ -193,28 +197,23 @@
             updateCalculations();
         }
         
-        // 读取轨道能量数据
         async function loadOrbitalData() {
             try {
-                // 读取轨道能量值
                 const energiesResponse = await fetch('orbitals.txt');
                 const energiesText = await energiesResponse.text();
                 orbitalData.energies = energiesText.trim().split('\n').map(Number);
                 
-                // 读取HOMO/LUMO位置信息
                 const infoResponse = await fetch('orbital_info.json');
                 const info = await infoResponse.json();
                 orbitalData.homoIndex = info.HOMO;
                 orbitalData.lumoIndex = info.LUMO;
                 
-                // 更新参考信息
                 updateReferenceInfo();
                 
-                // 设置初始值
                 document.getElementById('orbital1').value = orbitalData.lumoIndex;
                 document.getElementById('orbital2').value = orbitalData.homoIndex;
                 
-                initializeChart();
+                initializePlot();
                 updateCalculations();
             } catch (error) {
                 showError('Error loading orbital data: ' + error.message);
@@ -222,7 +221,6 @@
         }
         
         function updateReferenceInfo() {
-            // 更新两个输入框的参考信息
             ['1', '2'].forEach(suffix => {
                 document.getElementById(`homo-index${suffix}`).textContent = orbitalData.homoIndex;
                 document.getElementById(`lumo-index${suffix}`).textContent = orbitalData.lumoIndex;
@@ -257,78 +255,95 @@
                 document.getElementById('gap-value').textContent = `${gap.toFixed(4)} eV`;
             }
             
-            updateChartHighlights(index1, index2);
+            updatePlot(index1, index2);
         }
         
-        function initializeChart() {
-            const ctx = document.getElementById('energyChart').getContext('2d');
-            
-            const labels = orbitalData.energies.map((_, index) => index);
-            const datasets = [{
-                label: 'Orbital Energies',
-                data: orbitalData.energies,
-                borderColor: '#2196f3',
-                backgroundColor: 'rgba(33, 150, 243, 0.1)',
-                pointRadius: 0,
-                borderWidth: 1
-            }];
-            
-            if (chart) {
-                chart.destroy();
-            }
-            
-            chart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: datasets
+        function initializePlot() {
+            const allOrbitalTrace = {
+                x: Array.from({length: orbitalData.energies.length}, (_, i) => i),
+                y: orbitalData.energies,
+                mode: 'lines',
+                name: 'All Orbitals',
+                line: {
+                    color: '#2196f3',
+                    width: 2
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Energy (eV)'
-                            }
-                        },
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Orbital Index'
-                            }
-                        }
-                    }
+                hovertemplate: 'Orbital: %{x}<br>Energy: %{y:.4f} eV<extra></extra>'
+            };
+
+            const layout = {
+                title: 'Orbital Energy Levels',
+                xaxis: {
+                    title: 'Orbital Index',
+                    showgrid: true,
+                    gridcolor: '#f0f0f0'
+                },
+                yaxis: {
+                    title: 'Energy (eV)',
+                    showgrid: true,
+                    gridcolor: '#f0f0f0'
+                },
+                hovermode: 'closest',
+                showlegend: true,
+                plot_bgcolor: 'white',
+                paper_bgcolor: 'white',
+                margin: {
+                    l: 60,
+                    r: 30,
+                    t: 50,
+                    b: 50
                 }
-            });
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToAdd: ['drawline', 'drawopenpath', 'eraseshape'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: 'orbital_energy_plot',
+                    height: 800,
+                    width: 1200,
+                    scale: 2
+                }
+            };
+
+            Plotly.newPlot('plot', [allOrbitalTrace], layout, config);
         }
         
-        function updateChartHighlights(index1, index2) {
-            if (!chart) return;
-            
-            const highlightData = orbitalData.energies.map((energy, index) => {
-                if (index === index1 || index === index2) {
-                    return energy;
-                }
-                return null;
-            });
-            
-            if (chart.data.datasets.length > 1) {
-                chart.data.datasets.pop();
+        function updatePlot(index1, index2) {
+            // 创建选中轨道的数据点
+            const selectedPoints = {
+                x: [],
+                y: [],
+                text: [],
+                mode: 'markers+text',
+                name: 'Selected Orbitals',
+                marker: {
+                    size: 10,
+                    color: '#f44336'
+                },
+                textposition: 'top',
+                hovertemplate: '%{text}<br>Energy: %{y:.4f} eV<extra></extra>'
+            };
+
+            if (index1 !== null && index1 >= 0 && index1 < orbitalData.energies.length) {
+                selectedPoints.x.push(index1);
+                selectedPoints.y.push(orbitalData.energies[index1]);
+                selectedPoints.text.push(`Orbital ${index1}`);
             }
-            
-            chart.data.datasets.push({
-                label: 'Selected Orbitals',
-                data: highlightData,
-                borderColor: '#f44336',
-                backgroundColor: '#f44336',
-                pointRadius: 6,
-                pointHoverRadius: 8,
-                showLine: false
-            });
-            
-            chart.update();
+
+            if (index2 !== null && index2 >= 0 && index2 < orbitalData.energies.length) {
+                selectedPoints.x.push(index2);
+                selectedPoints.y.push(orbitalData.energies[index2]);
+                selectedPoints.text.push(`Orbital ${index2}`);
+            }
+
+            Plotly.update('plot', {}, {}, [1]);  // 移除旧的选中点
+            if (selectedPoints.x.length > 0) {
+                Plotly.addTraces('plot', selectedPoints);
+            }
         }
         
         function showError(message) {
