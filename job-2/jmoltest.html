@@ -53,6 +53,8 @@ function loadFrame(frameIndex) {
     });
     script += "}; display;";
 
+    console.log("Generated script:", script);  // 添加调试信息
+
     // 如果已经选择了键，显示测量结果
     if (selectedAtoms.length === 2) {
         const [atom1, atom2] = selectedAtoms;
@@ -92,8 +94,12 @@ function previousFrame() {
 }
 
 window.onload = function() {
-    Jmol.getApplet("mainJmol", Info);
-    loadFrame(0);
+    try {
+        mainJmol = Jmol.getApplet("mainJmol", Info);
+        loadFrame(0);
+    } catch (e) {
+        console.error("Error initializing JSmol:", e);
+    }
 };
 </script>
 </head>
