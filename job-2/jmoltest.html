@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>H2O 优化轨迹可视化</title>
+<!-- 引入最新的 JSmol 库 -->
+<script type="text/javascript" src="https://chemapps.stolaf.edu/jmol/jsmol/JSmol.min.js"></script>
+<script type="text/javascript">
+var Info = {
+    width: 500,
+    height: 500,
+    use: "HTML5",
+    j2sPath: "https://chemapps.stolaf.edu/jmol/jsmol/j2s",
+    script: "set frank off; set antialiasDisplay true; set background white;",
+    readyFunction: null
+};
+
+var selectedAtoms = [];
+var currentFrame = 0;
+var framesData = [
+    // 三帧 H2O 的坐标数据
+    {
+        "atoms": [
+            {"element": "O", "x": 0.0, "y": 0.0, "z": 0.0},
+            {"element": "H", "x": 0.96, "y": 0.0, "z": 0.0},
+            {"element": "H", "x": -0.96, "y": 0.0, "z": 0.0}
+        ]
+    },
+    {
+        "atoms": [
+            {"element": "O", "x": 0.0, "y": 0.0, "z": 0.0},
+            {"element": "H", "x": 0.98, "y": 0.0, "z": 0.0},
+            {"element": "H", "x": -0.98, "y": 0.0, "z": 0.0}
+        ]
+    },
+    {
+        "atoms": [
+            {"element": "O", "x": 0.0, "y": 0.0, "z": 0.0},
+            {"element": "H", "x": 1.0, "y": 0.0, "z": 0.0},
+            {"element": "H", "x": -1.0, "y": 0.0, "z": 0.0}
+        ]
+    }
+];
+
+function loadFrame(frameIndex) {
+    currentFrame = frameIndex;
+    const frame = framesData[frameIndex];
+    let script = "load INLINE {";
+
+    // 构建分子结构字符串
+    frame.atoms.forEach(atom => {
+        script += `[${atom.element}] ${atom.x} ${atom.y} ${atom.z}; `;
+    });
+    script += "}; display;";
+
+    // 如果已经选择了键，显示测量结果
+    if (selectedAtoms.length === 2) {
+        const [atom1, atom2] = selectedAtoms;
+        script += `measure (${atom1 + 1}) (${atom2 + 1});`;
+    }
+
+    // 发送脚本到 Jmol
+    Jmol.script(mainJmol, script);
+}
+
+function selectAtoms() {
+    const atom1 = parseInt(prompt("选择第一个原子的索引 (0, 1, 或 2):"));
+    const atom2 = parseInt(prompt("选择第二个原子的索引 (0, 1, 或 2):"));
+
+    if (!isNaN(atom1) && !isNaN(atom2) && atom1 !== atom2) {
+        selectedAtoms = [atom1, atom2];
+        loadFrame(currentFrame);
+    } else {
+        alert("无效的选择，请重新选择不同的原子索引。");
+    }
+}
+
+function nextFrame() {
+    if (currentFrame < framesData.length - 1) {
+        loadFrame(currentFrame + 1);
+    } else {
+        alert("已经是最后一帧。");
+    }
+}
+
+function previousFrame() {
+    if (currentFrame > 0) {
+        loadFrame(currentFrame - 1);
+    } else {
+        alert("已经是第一帧。");
+    }
+}
+
+window.onload = function() {
+    Jmol.getApplet("mainJmol", Info);
+    loadFrame(0);
+};
+</script>
+</head>
+<body>
+<div id="mainJmol" style="margin: auto;"></div>
+<div style="text-align: center;">
+    <button onclick="previousFrame()">上一帧</button>
+    <button onclick="selectAtoms()">选择键长</button>
+    <button onclick="nextFrame()">下一帧</button>
+</div>
+</body>
+</html>
