@@ -88,7 +88,7 @@
             'use strict';
 
             // 常量定义
-            const TRAJECTORY_URL = new URLSearchParams(window.location.search).get('data') || './data_3dmol.json';
+            const TRAJECTORY_URL = new URLSearchParams(window.location.search).get('data') || 'https://pan.wxyhgk.com/d/local/html/test1/data_3dmol.json';
             const MIN_PLAYBACK_SPEED = 50;
             const DEFAULT_PLAYBACK_SPEED = 100;
 
@@ -112,6 +112,9 @@
             const yAxisTitles = plotTitles;
             let minY = null;
             let maxY = null;
+
+            // 存储用户选择的测量
+            let selectedMeasurements = [];
 
             // 定义颜色方案
             const colorScheme = {
@@ -159,7 +162,9 @@
 
                 return {
                     data: [trace],
-                    title: plotTitles[plotType]
+                    layout: {
+                        title: plotTitles[plotType]
+                    }
                 };
             };
 
@@ -220,11 +225,6 @@
                 const xHighlight = [plotData.data[0].x[step]];
                 const yHighlight = [plotData.data[0].y[step]];
 
-                const update = {
-                    x: [plotData.data[0].x, xHighlight],
-                    y: [plotData.data[0].y, yHighlight]
-                };
-
                 const traceHighlight = {
                     x: xHighlight,
                     y: yHighlight,
@@ -240,10 +240,10 @@
                         }
                     },
                     hoverinfo: 'none',
-                    showlegend: False
+                    showlegend: false
                 };
 
-                Plotly.react('energy-chart', [plotData.data[0], traceHighlight], Plotly.Plots.layoutAttributes, {responsive: true});
+                Plotly.react('energy-chart', [plotData.data[0], traceHighlight], plotData.layout, {responsive: true});
             };
 
             /**
@@ -309,6 +309,25 @@
                         jsmolApplet = applet;
                         loadAllFrames();
                         displayMolecule(currentStep);
+                        // 启用拾取模式
+                        Jmol.script(jsmolApplet, 'set picking on; set pickingStyle measure distance;');
+                    },
+                    pickCallback: atom => {
+                        if (!atom) return;
+                        const atomIndex = atom.atomno;
+                        const lastMeasurement = selectedMeasurements[selectedMeasurements.length - 1];
+
+                        if (!lastMeasurement || lastMeasurement.length === 2) {
+                            // 开始新的测量
+                            selectedMeasurements.push([atomIndex]);
+                        } else {
+                            // 添加到当前测量
+                            lastMeasurement.push(atomIndex);
+                            if (lastMeasurement.length === 2) {
+                                // 更新测量
+                                updateMeasurements();
+                            }
+                        }
                     }
                 };
                 // 初始化 JSmol
@@ -339,6 +358,24 @@
             };
 
             /**
+             * 更新测量显示
+             */
+            const updateMeasurements = () => {
+                if (!jsmolApplet) return;
+
+                // 清除之前的测量
+                Jmol.script(jsmolApplet, 'measure delete all;');
+
+                // 重新添加测量
+                selectedMeasurements.forEach(pair => {
+                    if (pair.length === 2) {
+                        const [atom1, atom2] = pair;
+                        Jmol.script(jsmolApplet, `measure (${atom1}) (${atom2});`);
+                    }
+                });
+            };
+
+            /**
              * 将坐标数组转换为XYZ格式的字符串
              */
             const convertToXYZ = frame => {
@@ -363,6 +400,9 @@
 
                     // 切换到指定帧（JSmol 的帧从 1 开始）
                     Jmol.script(jsmolApplet, `frame ${step + 1};`);
+
+                    // 更新测量
+                    updateMeasurements();
 
                     updateInfoPanel(step);
                     document.getElementById('step-slider').value = step;
