@@ -1,16 +1,9 @@
-name = "Alice"
-age = 30
-city = "Beijing"
-job = "Engineer"
-
-# 定义一个格式化的用户信息模板
-user_info_template = """
-姓名: {0}
-年龄: {1}
-城市: {2}
-职业: {3}
-"""
-
-# 可以重复使用这个模板
-user1_info = user_info_template.format(name, age, city, job)
-print(user1_info)
+name = "平凡世界"
+author = "路遥"
+year = "1991"
+description = (
+    f"书名：{name}\n"
+    f"作者：{author}\n"
+    f"出版时间：{year}\n"
+)
+print(description)
