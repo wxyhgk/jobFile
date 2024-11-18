@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>xtb 优化结果展示</title>
+    <!-- 引入 Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <!-- 引入 jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- 引入 JSmol -->
+    <script type="text/javascript" src="https://chemapps.stolaf.edu/jmol/jsmol/JSmol.min.nojq.js"></script>
+    <style>
+        body {
+            display: flex;
+            flex-direction: row;
+            font-family: Arial, sans-serif;
+        }
+        #jsmol-container {
+            width: 60%;
+            height: 600px;
+            border: 1px solid #ccc;
+        }
+        #plot-container {
+            width: 40%;
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="jsmol-container"></div>
+    <div id="plot-container">
+        <div id="energy-plot" style="width:100%;height:500px;"></div>
+    </div>
+
+    <script>
+        var jsmolApplet;
+
+        // JSmol 初始化信息
+        var Info = {
+            width: "100%",
+            height: "100%",
+            use: "HTML5",
+            j2sPath: "https://chemapps.stolaf.edu/jmol/jsmol/j2s",
+            debug: false,
+            color: "white",
+            disableInitialConsole: true,
+            addSelectionOptions: false,
+            script: `
+                set background white;
+                set ambientPercent 45;
+                set diffusePercent 85;
+                set specular ON;
+                set specularPercent 25;
+                set specularPower 40;
+                set specularExponent 6;
+                center all;
+                spacefill 23%;
+                wireframe 0.15;
+                font measure 20;
+                set pickingStyle MEASURE;
+                set measurementUnits ANGSTROMS;
+                set measurementLabels ON;
+                set measurementNumbers ON;
+                set measurements ON;
+                set measurementunits angstroms;
+                color measurements red;
+                set measurements 2;
+                font label 16 sanserif bold;
+                set echo center;
+                color label black;
+                select all;
+                set echo label1 40% 90%;
+                echo "这是一个标记";
+                zoom 100;
+                frank OFF;
+            `,
+            readyFunction: function(applet) {
+                jsmolApplet = applet;
+                console.log("JSmol is ready");
+            }
+        };
+
+        // 等待页面加载完成
+        $(document).ready(function() {
+            $("#jsmol-container").html(Jmol.getAppletHtml("jsmolApplet", Info));
+            loadPlotAndData();
+        });
+
+        function loadPlotAndData() {
+            // 加载能量数据
+            $.getJSON('energies.json', function(data) {
+                var steps = data.map(d => d.step);
+                var energies = data.map(d => d.energy);
+
+                var trace = {
+                    x: steps,
+                    y: energies,
+                    mode: 'lines+markers',
+                    type: 'scatter',
+                    marker: { size: 8 },
+                    line: { shape: 'linear' }
+                };
+
+                var layout = {
+                    title: '能量随优化步数变化曲线',
+                    xaxis: { title: '优化步数' },
+                    yaxis: { title: '能量 (Hartree)' }
+                };
+
+                Plotly.newPlot('energy-plot', [trace], layout);
+
+                // 添加点击事件
+                var plot = document.getElementById('energy-plot');
+                plot.on('plotly_click', function(data){
+                    var point = data.points[0];
+                    var step = point.x;
+                    loadMolecule(step);
+                });
+
+                // 默认加载第一个步骤
+                if (steps.length > 0) {
+                    loadMolecule(steps[0]);
+                }
+            });
+        }
+
+        function loadMolecule(step) {
+            var xyzFile = `xtbstep/step${step}.xyz`;
+            // 使用 AJAX 获取 XYZ 文件内容
+            $.ajax({
+                url: xyzFile,
+                dataType: 'text',
+                success: function(data) {
+                    // 将 XYZ 数据传递给 JSmol
+                    Jmol.script(jsmolApplet, `load inline "${escapeQuotes(data)}";`);
+                },
+                error: function() {
+                    alert(`无法加载文件: ${xyzFile}`);
+                }
+            });
+        }
+
+        function escapeQuotes(str) {
+            return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        }
+    </script>
+</body>
+</html>
