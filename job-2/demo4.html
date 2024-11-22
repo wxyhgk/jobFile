@@ -148,6 +148,7 @@
                     mode: 'lines+markers',
                     type: 'scatter',
                     name: plotTitles[plotType],
+                    showlegend: false,
                     line: {
                         color: colorScheme[plotType],
                         width: 2,
@@ -162,9 +163,9 @@
 
                 return {
                     data: [trace],
-                    layout: {
-                        title: plotTitles[plotType]
-                    }
+                    // layout: {
+                    //     title: plotTitles[plotType]
+                    // }
                 };
             };
 
@@ -310,7 +311,7 @@
                         loadAllFrames();
                         displayMolecule(currentStep);
                         // 启用拾取模式
-                        Jmol.script(jsmolApplet, 'set picking on; set pickingStyle measure distance;');
+                        Jmol.script(jsmolApplet, 'set picking on; set pickingStyle measure distance;color measurements red;set measurements 2;');
                     },
                     pickCallback: atom => {
                         if (!atom) return;
@@ -354,7 +355,7 @@
                 `);
 
                 // 启用鼠标交互
-                Jmol.script(jsmolApplet, 'set frank off; set zoomLarge false; set antialiasDisplay true;');
+                Jmol.script(jsmolApplet, 'set frank off; set zoomLarge false; set antialiasDisplay true;color measurements red;');
             };
 
             /**

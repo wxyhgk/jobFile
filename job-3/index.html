@@ -12,28 +12,69 @@
     <style>
         body {
             display: flex;
-            flex-direction: row;
+            flex-direction: column;
             font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+        }
+        #main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
         }
         #jsmol-container {
             width: 60%;
-            height: 600px;
+            height: 100%;
             border: 1px solid #ccc;
         }
         #plot-container {
             width: 40%;
             padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #energy-plot {
+            width: 100%;
+            flex: 1;
+        }
+        #slider-container {
+            width: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            border-top: 1px solid #ccc;
+        }
+        #step-slider {
+            width: 80%;
+        }
+        #current-step {
+            margin-top: 10px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div id="jsmol-container"></div>
-    <div id="plot-container">
-        <div id="energy-plot" style="width:100%;height:500px;"></div>
+    <div id="main-container">
+        <div id="jsmol-container"></div>
+        <div id="plot-container">
+            <div id="energy-plot"></div>
+        </div>
+    </div>
+    <div id="slider-container">
+        <input type="range" id="step-slider" min="0" max="0" value="0" step="1">
+        <div id="current-step">当前步数: 0</div>
     </div>
 
     <script>
         var jsmolApplet;
+        var stepsData = []; // 存储所有步数
+        var currentStep = 0; // 当前选中的步数
+        var viewState = ""; // 存储当前视图状态
 
         // JSmol 初始化信息
         var Info = {
@@ -47,32 +88,6 @@
             addSelectionOptions: false,
             script: `
                 set background white;
-                set ambientPercent 45;
-                set diffusePercent 85;
-                set specular ON;
-                set specularPercent 25;
-                set specularPower 40;
-                set specularExponent 6;
-                center all;
-                spacefill 23%;
-                wireframe 0.15;
-                font measure 20;
-                set pickingStyle MEASURE;
-                set measurementUnits ANGSTROMS;
-                set measurementLabels ON;
-                set measurementNumbers ON;
-                set measurements ON;
-                set measurementunits angstroms;
-                color measurements red;
-                set measurements 2;
-                font label 16 sanserif bold;
-                set echo center;
-                color label black;
-                select all;
-                set echo label1 40% 90%;
-                echo "这是一个标记";
-                zoom 100;
-                frank OFF;
             `,
             readyFunction: function(applet) {
                 jsmolApplet = applet;
@@ -89,15 +104,26 @@
         function loadPlotAndData() {
             // 加载能量数据
             $.getJSON('energies.json', function(data) {
-                var steps = data.map(d => d.step);
+                stepsData = data.map(d => d.step);
                 var energies = data.map(d => d.energy);
 
+                // 初始化滑动条
+                var slider = $("#step-slider");
+                if (stepsData.length > 0) {
+                    var lastStep = stepsData[stepsData.length - 1];
+                    slider.attr('min', stepsData[0]);
+                    slider.attr('max', lastStep);
+                    slider.val(lastStep);
+                    currentStep = lastStep;
+                    $("#current-step").text(`当前步数: ${currentStep}`);
+                }
+
                 var trace = {
-                    x: steps,
+                    x: stepsData,
                     y: energies,
                     mode: 'lines+markers',
                     type: 'scatter',
-                    marker: { size: 8 },
+                    marker: { size: 8, color: 'blue' }, // 默认颜色设为蓝色
                     line: { shape: 'linear' }
                 };
 
@@ -114,14 +140,45 @@
                 plot.on('plotly_click', function(data){
                     var point = data.points[0];
                     var step = point.x;
-                    loadMolecule(step);
+                    slider.val(step); // 同步滑动条
+                    updateStep(step);
                 });
 
-                // 默认加载第一个步骤
-                if (steps.length > 0) {
-                    loadMolecule(steps[0]);
+                // 添加滑动条事件
+                slider.on('input change', function() {
+                    var step = parseInt($(this).val());
+                    updateStep(step);
+                });
+
+                // 默认加载最后一步
+                if (stepsData.length > 0) {
+                    loadMolecule(stepsData[stepsData.length - 1]);
+                    highlightStep(stepsData[stepsData.length - 1]);
                 }
             });
+        }
+
+        function updateStep(step) {
+            currentStep = step;
+            $("#current-step").text(`当前步数: ${currentStep}`);
+            saveViewState();
+            loadMolecule(step);
+            highlightStep(step);
+        }
+
+        function saveViewState() {
+            // 保存当前视图状态
+            // 获取旋转和缩放信息
+            var rotation = Jmol.script(jsmolApplet, "get rotation");
+            var zoom = Jmol.script(jsmolApplet, "get zoomscale");
+            viewState = rotation + "; set zoomscale " + zoom + ";";
+        }
+
+        function applyViewState() {
+            // 应用保存的视图状态
+            if (viewState) {
+                Jmol.script(jsmolApplet, viewState);
+            }
         }
 
         function loadMolecule(step) {
@@ -133,6 +190,30 @@
                 success: function(data) {
                     // 将 XYZ 数据传递给 JSmol
                     Jmol.script(jsmolApplet, `load inline "${escapeQuotes(data)}";`);
+                    // 重新应用设置
+                    Jmol.script(jsmolApplet, `
+                        set background white;
+                        set ambientPercent 45;
+                        set diffusePercent 85;
+                        set specular ON;
+                        set specularPercent 25;
+                        set specularPower 40;
+                        set specularExponent 6;
+                        center all;
+                        spacefill 23%;
+                        wireframe 0.15;
+                        font measure 20;
+                        set picking MEASURE;
+                        set pickingStyle MEASURE;
+                        set measurementUnits ANGSTROMS;
+                        set measurementLabels ON;
+                        set measurementNumbers ON;
+                        set measurements ON;
+                        color measurements red;
+                        set measurements 2;
+                    `);
+                    // 应用之前的视图状态
+                    applyViewState();
                 },
                 error: function() {
                     alert(`无法加载文件: ${xyzFile}`);
@@ -142,6 +223,17 @@
 
         function escapeQuotes(str) {
             return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, '\\n');
+        }
+
+        // 高亮选中的步骤
+        function highlightStep(step) {
+            var markerColors = stepsData.map(s => s === step ? 'red' : 'blue');
+
+            var update = {
+                'marker.color': [markerColors]
+            };
+
+            Plotly.restyle('energy-plot', update);
         }
     </script>
 </body>
