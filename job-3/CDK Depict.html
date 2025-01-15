@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Molecule Viewer</title>
+    <style>
+        .container {
+            width: 200px;
+            margin: 20px auto;
+            text-align: center;
+        }
+        #moleculeImage {
+            width: 100%;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        #rotationSlider {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img id="moleculeImage" alt="Molecule structure">
+        <div class="slider-container">
+            <span>0°</span>
+            <input type="range" id="rotationSlider" min="0" max="359" value="0">
+            <span>360°</span>
+        </div>
+    </div>
+
+    <script>
+        const smiles = 'CC(C)(C)C1=CC(B2C3=C4C=CC5=C3N(C6=CC=C(C(C)(C)C)C=C6C57C8=C(C9=C7C=CC=C9)C=CC=C8)C%10=C2C=CC(C([2H])([2H])[2H])=N%10)=C(O4)C=C1';
+
+        function encodeSmiles(smiles) {
+            return smiles
+                .replace(/%(\d\d)/g, '%25$1')
+                .replace(/=/g, '%3D');
+        }
+
+        function generateUrl(rotation) {
+            const baseUrl = 'https://www.simolecule.com/cdkdepict/depict/cow/svg';
+            const params = [
+                `smi=${encodeSmiles(smiles)}`,
+                'w=400',
+                'h=400',
+                'abbr=off',
+                'hdisp=S',
+                'zoom=6.0',
+                'annotate=none',
+                `r=${rotation}`
+            ].join('&');
+
+            return `${baseUrl}?${params}`;
+        }
+
+        const slider = document.getElementById('rotationSlider');
+        const image = document.getElementById('moleculeImage');
+
+        slider.addEventListener('input', (e) => {
+            const rotation = e.target.value;
+            image.src = generateUrl(rotation);
+        });
+
+        // Initialize with rotation 0
+        image.src = generateUrl(0);
+    </script>
+</body>
+</html>
