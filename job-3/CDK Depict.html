@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Simple Molecule Viewer</title>
+    <title>Molecule Viewer</title>
     <style>
         .container {
-            width: 200px;
+            width: 400px;
             margin: 20px auto;
             text-align: center;
         }
@@ -21,6 +21,10 @@
         #rotationSlider {
             flex: 1;
         }
+        .error {
+            color: red;
+            margin: 20px;
+        }
     </style>
 </head>
 <body>
@@ -34,7 +38,9 @@
     </div>
 
     <script>
-        const smiles = 'CC(C)(C)C1=CC(B2C3=C4C=CC5=C3N(C6=CC=C(C(C)(C)C)C=C6C57C8=C(C9=C7C=CC=C9)C=CC=C8)C%10=C2C=CC(C([2H])([2H])[2H])=N%10)=C(O4)C=C1';
+        // 从URL获取SMILES参数
+        const urlParams = new URLSearchParams(window.location.search);
+        const smiles = urlParams.get('smiles');
 
         function encodeSmiles(smiles) {
             return smiles
@@ -43,6 +49,9 @@
         }
 
         function generateUrl(rotation) {
+            if (!smiles) {
+                return '';
+            }
             const baseUrl = 'https://www.simolecule.com/cdkdepict/depict/cow/svg';
             const params = [
                 `smi=${encodeSmiles(smiles)}`,
@@ -50,7 +59,7 @@
                 'h=400',
                 'abbr=off',
                 'hdisp=S',
-                'zoom=6.0',
+                'zoom=7.0',
                 'annotate=none',
                 `r=${rotation}`
             ].join('&');
@@ -60,14 +69,21 @@
 
         const slider = document.getElementById('rotationSlider');
         const image = document.getElementById('moleculeImage');
+        const container = document.querySelector('.container');
 
-        slider.addEventListener('input', (e) => {
-            const rotation = e.target.value;
-            image.src = generateUrl(rotation);
-        });
+        if (!smiles) {
+            // 如果没有SMILES参数，显示错误信息
+            container.innerHTML = '<div class="error">请在URL中添加SMILES参数，例如：?smiles=CC(C)C</div>';
+        } else {
+            // 有SMILES参数时，设置图像和滑动条功能
+            slider.addEventListener('input', (e) => {
+                const rotation = e.target.value;
+                image.src = generateUrl(rotation);
+            });
 
-        // Initialize with rotation 0
-        image.src = generateUrl(0);
+            // 初始化显示
+            image.src = generateUrl(0);
+        }
     </script>
 </body>
 </html>
