@@ -8,6 +8,28 @@
             margin: 20px auto;
             text-align: center;
         }
+        .input-container {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        #smilesInput {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .submit-button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .submit-button:hover {
+            background-color: #45a049;
+        }
         #moleculeImage {
             width: 100%;
             margin-bottom: 20px;
@@ -30,7 +52,8 @@
         }
         .error {
             color: red;
-            margin: 20px;
+            margin: 10px 0;
+            font-size: 14px;
         }
         .loading {
             position: absolute;
@@ -46,9 +69,14 @@
 </head>
 <body>
     <div class="container">
+        <div class="input-container">
+            <input type="text" id="smilesInput" placeholder="Enter SMILES string (e.g., CC(C)C)" value="">
+            <button class="submit-button" id="updateButton">Update</button>
+        </div>
+        <div id="errorMessage" class="error"></div>
         <div style="position: relative;">
             <img id="moleculeImage" alt="Molecule structure">
-            <div id="loading" class="loading">生成中...</div>
+            <div id="loading" class="loading">Loading...</div>
         </div>
         <div class="controls-container">
             <span>0°</span>
@@ -56,15 +84,15 @@
             <span>360°</span>
             <div class="flip-control">
                 <input type="checkbox" id="flipToggle">
-                <label for="flipToggle">翻转<label>
+                <label for="flipToggle">Flip</label>
             </div>
         </div>
     </div>
 
     <script>
-        // Get SMILES parameter from URL
+        // 获取URL参数中的SMILES
         const urlParams = new URLSearchParams(window.location.search);
-        const smiles = urlParams.get('smiles');
+        const urlSmiles = urlParams.get('smiles');
 
         // 图像缓存
         const imageCache = new Map();
@@ -75,7 +103,7 @@
                 .replace(/=/g, '%3D');
         }
 
-        function generateUrl(rotation, flip) {
+        function generateUrl(smiles, rotation, flip) {
             if (!smiles) {
                 return '';
             }
@@ -125,56 +153,85 @@
             });
         }
 
+        const smilesInput = document.getElementById('smilesInput');
+        const updateButton = document.getElementById('updateButton');
         const slider = document.getElementById('rotationSlider');
         const flipToggle = document.getElementById('flipToggle');
         const image = document.getElementById('moleculeImage');
         const loading = document.getElementById('loading');
-        const container = document.querySelector('.container');
+        const errorMessage = document.getElementById('errorMessage');
 
-        if (!smiles) {
-            container.innerHTML = '<div class="error">请在URL中添加SMILES参数，例如：?smiles=CC(C)C</div>';
-        } else {
-            // 更新图像的函数
-            async function updateImage() {
-                const rotation = slider.value;
-                const flip = flipToggle.checked;
-                const url = generateUrl(rotation, flip);
+        // 如果URL中有SMILES，填入输入框
+        if (urlSmiles) {
+            smilesInput.value = urlSmiles;
+        }
 
-                loading.style.display = 'block';
-                try {
-                    await preloadImage(url);
-                    image.src = url;
-                } catch (error) {
-                    console.error('Failed to load image:', error);
-                } finally {
-                    loading.style.display = 'none';
-                }
+        // 更新图像的函数
+        async function updateImage() {
+            const smiles = smilesInput.value.trim();
+            if (!smiles) {
+                errorMessage.textContent = 'Please enter a SMILES string';
+                return;
             }
+            errorMessage.textContent = '';
 
-            // 使用节流的更新函数
-            const throttledUpdate = throttle(updateImage, 150);
+            const rotation = slider.value;
+            const flip = flipToggle.checked;
+            const url = generateUrl(smiles, rotation, flip);
 
-            // 预加载常用角度的图像
-            async function preloadCommonAngles() {
-                const angles = [0, 90, 180, 270];
-                const flips = [false, true];
-                
-                for (const angle of angles) {
-                    for (const flip of flips) {
-                        const url = generateUrl(angle, flip);
-                        try {
-                            await preloadImage(url);
-                        } catch (error) {
-                            console.error('Failed to preload:', error);
-                        }
+            loading.style.display = 'block';
+            try {
+                await preloadImage(url);
+                image.src = url;
+            } catch (error) {
+                console.error('Failed to load image:', error);
+                errorMessage.textContent = 'Failed to load molecule image. Please check your SMILES string.';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // 使用节流的更新函数
+        const throttledUpdate = throttle(updateImage, 150);
+
+        // 预加载常用角度的图像
+        async function preloadCommonAngles() {
+            const smiles = smilesInput.value.trim();
+            if (!smiles) return;
+
+            const angles = [0, 90, 180, 270];
+            const flips = [false, true];
+            
+            for (const angle of angles) {
+                for (const flip of flips) {
+                    const url = generateUrl(smiles, angle, flip);
+                    try {
+                        await preloadImage(url);
+                    } catch (error) {
+                        console.error('Failed to preload:', error);
                     }
                 }
             }
+        }
 
-            slider.addEventListener('input', throttledUpdate);
-            flipToggle.addEventListener('change', updateImage);
+        // 事件监听
+        updateButton.addEventListener('click', async () => {
+            await updateImage();
+            preloadCommonAngles();
+        });
 
-            // 初始化显示和预加载
+        smilesInput.addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter') {
+                await updateImage();
+                preloadCommonAngles();
+            }
+        });
+
+        slider.addEventListener('input', throttledUpdate);
+        flipToggle.addEventListener('change', updateImage);
+
+        // 初始化显示
+        if (smilesInput.value) {
             updateImage();
             preloadCommonAngles();
         }
