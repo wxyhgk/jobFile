@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Molecule Viewer</title>
+    <title>Simple Molecule Viewer</title>
     <style>
         .container {
-            width: 400px;
+            width: 200px;
             margin: 20px auto;
             text-align: center;
         }
@@ -21,10 +21,6 @@
         #rotationSlider {
             flex: 1;
         }
-        .error {
-            color: red;
-            margin: 20px;
-        }
     </style>
 </head>
 <body>
@@ -38,9 +34,7 @@
     </div>
 
     <script>
-        // 从URL获取SMILES参数
-        const urlParams = new URLSearchParams(window.location.search);
-        const smiles = urlParams.get('smiles');
+        const smiles = 'N1(C(C2%3DCC%3DC3)%3DC3C4%3DCC%3DC5)C4%3DC5B6C7%3DC(N8C9%3DC6C(C%3DCC%3DC%%2510)%3DC%%2510N9C%%2511%3DC8C%3DCC%3DC%%2511)C%3DCC(C%%25122C(C%3DCC%3DC%%2513)%3DC%%2513C%%2514%3DC%%2512C%3DCC%3DC%%2514)%3DC%2517'
 
         function encodeSmiles(smiles) {
             return smiles
@@ -49,9 +43,6 @@
         }
 
         function generateUrl(rotation) {
-            if (!smiles) {
-                return '';
-            }
             const baseUrl = 'https://www.simolecule.com/cdkdepict/depict/cow/svg';
             const params = [
                 `smi=${encodeSmiles(smiles)}`,
@@ -59,7 +50,7 @@
                 'h=400',
                 'abbr=off',
                 'hdisp=S',
-                'zoom=7.0',
+                'zoom=7',
                 'annotate=none',
                 `r=${rotation}`
             ].join('&');
@@ -69,21 +60,14 @@
 
         const slider = document.getElementById('rotationSlider');
         const image = document.getElementById('moleculeImage');
-        const container = document.querySelector('.container');
 
-        if (!smiles) {
-            // 如果没有SMILES参数，显示错误信息
-            container.innerHTML = '<div class="error">请在URL中添加SMILES参数，例如：?smiles=CC(C)C</div>';
-        } else {
-            // 有SMILES参数时，设置图像和滑动条功能
-            slider.addEventListener('input', (e) => {
-                const rotation = e.target.value;
-                image.src = generateUrl(rotation);
-            });
+        slider.addEventListener('input', (e) => {
+            const rotation = e.target.value;
+            image.src = generateUrl(rotation);
+        });
 
-            // 初始化显示
-            image.src = generateUrl(0);
-        }
+        // Initialize with rotation 0
+        image.src = generateUrl(0);
     </script>
 </body>
 </html>
