@@ -634,7 +634,15 @@
       stepSelector.classList.add('active');
       
       // 更新步骤信息
+    // 如果步骤数不多，显示详细信息
+    if (allGroups.length <= 5) {
       stepInfo.textContent = `发现 ${allGroups.length} 个优化步骤，每步包含 ${allGroups.map(g => g.length + '个状态').join(', ')}`;
+    } else {
+      // 如果步骤数较多，只显示总步骤数和状态数范围
+      const minStates = Math.min(...allGroups.map(g => g.length));
+      const maxStates = Math.max(...allGroups.map(g => g.length));
+      stepInfo.textContent = `发现 ${allGroups.length} 个优化步骤，每步包含 ${minStates}${minStates !== maxStates ? '-' + maxStates : ''} 个状态`;
+    }
       
       // 设置滑块范围
       stepRange.max = allGroups.length;
