@@ -20,7 +20,7 @@
     }
 
     .container {
-      max-width: 1200px;
+      max-width: 1400px;
       margin: 0 auto;
       background: white;
       box-shadow: 0 4px 20px rgba(0,0,0,0.1);
@@ -134,6 +134,123 @@
 
     .btn.secondary:hover {
       background: #d35400;
+    }
+
+    /* 优化步骤选择区域 */
+    .step-selector {
+      background: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 20px;
+      margin: 20px 0;
+      display: none;
+    }
+
+    .step-selector.active {
+      display: block;
+    }
+
+    .step-selector h4 {
+      color: #2c3e50;
+      margin-bottom: 15px;
+      font-size: 1.1rem;
+    }
+
+    .step-info {
+      margin-bottom: 15px;
+      color: #555;
+      font-size: 0.9rem;
+    }
+
+    .step-controls {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .step-input-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .step-input-group input {
+      width: 80px;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      text-align: center;
+    }
+
+    .step-range {
+      flex: 1;
+      margin: 0 15px;
+    }
+
+    .step-range input[type="range"] {
+      width: 100%;
+      margin: 10px 0;
+    }
+
+    .step-range-display {
+      text-align: center;
+      font-weight: bold;
+      color: #3498db;
+      margin-bottom: 5px;
+    }
+
+    .step-buttons {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .step-nav-btn {
+      background: #ecf0f1;
+      border: 1px solid #bdc3c7;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .step-nav-btn:hover {
+      background: #d5dbdb;
+    }
+
+    .step-nav-btn:disabled {
+      background: #ecf0f1;
+      color: #95a5a6;
+      cursor: not-allowed;
+    }
+
+    /* Quick step buttons */
+    .quick-steps {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 15px;
+    }
+
+    .quick-step-btn {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      transition: all 0.3s;
+    }
+
+    .quick-step-btn:hover {
+      background: #2980b9;
+    }
+
+    .quick-step-btn.active {
+      background: #e74c3c;
     }
 
     .table-container {
@@ -262,14 +379,18 @@
     }
 
     @media (max-width: 768px) {
-      .control-panel {
+      .control-panel, .step-controls {
         flex-direction: column;
         align-items: stretch;
       }
       
-      .control-panel > * {
+      .control-panel > *, .step-controls > * {
         width: 100%;
         text-align: center;
+      }
+      
+      .quick-steps {
+        justify-content: center;
       }
       
       table {
@@ -285,22 +406,23 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>Gaussian CPL g<sub>PL</sub> 解析与数据处理</h1>
-      <p>专业的圆偏振发光光谱分析工具</p>
+      <h1>Gaussian CPL g<sub>PL</sub> 多步骤解析与数据处理</h1>
+      <p>专业的opt TDDFT圆偏振发光光谱分析工具</p>
     </div>
 
     <div class="content">
       <div class="note-section">
         <h3>计算说明</h3>
+        <span class="unit">• 支持多优化步骤的TDDFT计算结果分析</span>
         <span class="unit">• absmiu (电偶极打印值) 单位：×10<sup>-18</sup> esu·cm</span>
         <span class="unit">• absm (磁偶极打印值) 单位：×10<sup>-20</sup> erg·G<sup>-1</sup></span>
         <span class="unit">• 发光不对称因子 g (glum) 为无量纲参数</span>
         
         <div class="formula">
-          g = 4 × (m<sub>cgs</sub> / μ<sub>cgs</sub>) × cosθ
+          g = 4 × (m<sub>cgs</sub> / μ<sub>cgs</sub>) × cosθ × 0.01
         </div>
         
-        <span class="unit">注：因打印值的单位前缀 10<sup>-20</sup>/10<sup>-18</sup> = 10<sup>-2</sup>，计算中已乘以 0.01 进行修正。</span>
+        <span class="unit">注：0.01为单位前缀修正因子 (10<sup>-20</sup>/10<sup>-18</sup>)</span>
       </div>
 
       <div class="control-panel">
@@ -325,6 +447,32 @@
         </div>
       </div>
 
+      <!-- 优化步骤选择器 -->
+      <div id="stepSelector" class="step-selector">
+        <h4>📈 选择优化步骤</h4>
+        <div id="stepInfo" class="step-info"></div>
+        
+        <div class="step-controls">
+          <div class="step-input-group">
+            <label>跳转到步骤:</label>
+            <input type="number" id="stepInput" min="1" value="1">
+            <button id="gotoStep" class="btn">跳转</button>
+          </div>
+          
+          <div class="step-range">
+            <div id="stepRangeDisplay" class="step-range-display">步骤 1</div>
+            <input type="range" id="stepRange" min="1" max="1" value="1">
+          </div>
+          
+          <div class="step-buttons">
+            <button id="prevStep" class="step-nav-btn">← 上一步</button>
+            <button id="nextStep" class="step-nav-btn">下一步 →</button>
+          </div>
+        </div>
+        
+        <div class="quick-steps" id="quickSteps"></div>
+      </div>
+
       <div id="status"></div>
       <div id="tableContainer"></div>
     </div>
@@ -340,14 +488,51 @@
     const statusDiv = document.getElementById('status');
     const pageSizeSelect = document.getElementById('pageSize');
     
-    let tableData = [];
+    // 步骤选择相关元素
+    const stepSelector = document.getElementById('stepSelector');
+    const stepInfo = document.getElementById('stepInfo');
+    const stepInput = document.getElementById('stepInput');
+    const gotoStepBtn = document.getElementById('gotoStep');
+    const stepRange = document.getElementById('stepRange');
+    const stepRangeDisplay = document.getElementById('stepRangeDisplay');
+    const prevStepBtn = document.getElementById('prevStep');
+    const nextStepBtn = document.getElementById('nextStep');
+    const quickStepsContainer = document.getElementById('quickSteps');
+    
+    let allGroups = [];
+    let currentStep = 1;
     let currentPage = 1;
     let pageSize = 20;
+    let currentTableData = [];
 
     fileInput.addEventListener('change', handleFileSelect);
     exportCsvBtn.addEventListener('click', exportToCsv);
     exportWordBtn.addEventListener('click', exportToWord);
     pageSizeSelect.addEventListener('change', handlePageSizeChange);
+    
+    // 步骤控制事件
+    gotoStepBtn.addEventListener('click', () => {
+      const step = parseInt(stepInput.value);
+      if (step >= 1 && step <= allGroups.length) {
+        setCurrentStep(step);
+      }
+    });
+    
+    stepRange.addEventListener('input', (e) => {
+      setCurrentStep(parseInt(e.target.value));
+    });
+    
+    prevStepBtn.addEventListener('click', () => {
+      if (currentStep > 1) {
+        setCurrentStep(currentStep - 1);
+      }
+    });
+    
+    nextStepBtn.addEventListener('click', () => {
+      if (currentStep < allGroups.length) {
+        setCurrentStep(currentStep + 1);
+      }
+    });
 
     function handleFileSelect(e) {
       const file = e.target.files[0];
@@ -368,82 +553,165 @@
 
     function parseLog(text) {
       const lines = text.split('\n');
-      const elecLines = [];
-      const magLines = [];
-      let parsingElec = false;
-      let parsingMag = false;
-
-      for (let line of lines) {
-        // 开始电偶极部分
+      const elecStarts = [];
+      const magStarts = [];
+      
+      lines.forEach((line, i) => {
         if (line.includes('Ground to excited state transition electric dipole moments')) {
-          parsingElec = true;
-          continue;
+          elecStarts.push(i);
         }
-        // 电偶极遇到下一个 velocity 或 magnetic 段就停止
-        if (parsingElec &&
-            (line.includes('Ground to excited state transition velocity') ||
-             line.includes('Ground to excited state transition magnetic dipole moments'))) {
-          parsingElec = false;
-        }
-        if (parsingElec && /^\s*\d+/.test(line)) {
-          elecLines.push(line.trim());
-        }
-
-        // 开始磁偶极部分
         if (line.includes('Ground to excited state transition magnetic dipole moments')) {
-          parsingMag = true;
-          continue;
+          magStarts.push(i);
         }
-        // 碰到空行就结束磁偶极部分
-        if (parsingMag && line.trim() === '') {
-          parsingMag = false;
-        }
-        if (parsingMag && /^\s*\d+/.test(line)) {
-          magLines.push(line.trim());
-        }
-      }
-
-      if (elecLines.length === 0 || magLines.length === 0) {
+      });
+      
+      const nGroups = Math.min(elecStarts.length, magStarts.length);
+      if (nGroups === 0) {
         showStatus('未找到 Transition dipole 数据，请检查 log 文件格式', 'error');
         return;
       }
-
-      tableData = elecLines.map((el, idx) => {
-        const e = el.split(/\s+/).slice(1, 4).map(Number);
-        const m = magLines[idx].split(/\s+/).slice(1, 4).map(Number);
-        const muMag = Math.hypot(...e);
-        const mMag = Math.hypot(...m);
-        const dot = e[0]*m[0] + e[1]*m[1] + e[2]*m[2];
-        const cosTheta = dot / (muMag * mMag);
-
-        // 打印值单位已是 ×10^-18 和 ×10^-20
-        const absmiu = muMag * 2.541746;      // a.u. to 10^-18 esu·cm
-        const absm = mMag * 2 * 9.274e-1;     // a.u. to 10^-20 erg·G^-1
-
-        // g 计算加上前缀修正
-        const gVal = 4 * (absm / absmiu) * prefixRatio * cosTheta;
-
-        return {
-          state: idx + 1,
-          absmiu: absmiu.toFixed(6),
-          absm: absm.toFixed(6),
-          cosTheta: cosTheta.toFixed(6),
-          g: gVal.toFixed(6),
-          g1000: (gVal * 1000).toFixed(3)
-        };
-      });
-
-      currentPage = 1;
-      renderTable();
+      
+      allGroups = [];
+      
+      for (let g = 0; g < nGroups; g++) {
+        // 电偶极区段
+        const eStart = elecStarts[g] + 1;
+        const eEnd = lines.slice(eStart).findIndex(l => 
+          l.includes('Ground to excited state transition velocity') ||
+          l.includes('Ground to excited state transition magnetic dipole moments')
+        );
+        const elecLines = lines.slice(eStart, eStart + (eEnd > 0 ? eEnd : lines.length))
+                               .filter(l => /^\s*\d+/.test(l));
+        
+        // 磁偶极区段
+        const mStart = magStarts[g] + 1;
+        const mEnd = lines.slice(mStart).findIndex(l => l.trim() === '');
+        const magLines = lines.slice(mStart, mStart + (mEnd > 0 ? mEnd : lines.length))
+                               .filter(l => /^\s*\d+/.test(l));
+        
+        // 按实际状态数量解析
+        const nStates = Math.min(elecLines.length, magLines.length);
+        const records = [];
+        
+        for (let i = 0; i < nStates; i++) {
+          const eVals = elecLines[i].trim().split(/\s+/).slice(1, 4).map(Number);
+          const mVals = magLines[i].trim().split(/\s+/).slice(1, 4).map(Number);
+          const mu = Math.hypot(...eVals);
+          const m = Math.hypot(...mVals);
+          const dot = eVals[0]*mVals[0] + eVals[1]*mVals[1] + eVals[2]*mVals[2];
+          const cosθ = dot / (mu * m);
+          const absmiu = mu * 2.541746;
+          const absm = m * 2 * 9.274e-1;
+          const gVal = 4 * (absm / absmiu) * prefixRatio * cosθ;
+          
+          records.push({
+            state: i + 1,
+            absmiu: absmiu.toFixed(6),
+            absm: absm.toFixed(6),
+            cosTheta: cosθ.toFixed(6),
+            g: gVal.toFixed(6),
+            g1000: (gVal * 1000).toFixed(3)
+          });
+        }
+        
+        allGroups.push(records);
+      }
+      
+      // 初始化步骤选择器
+      initializeStepSelector();
+      setCurrentStep(1);
       exportCsvBtn.disabled = false;
       exportWordBtn.disabled = false;
-      showStatus(`成功解析 ${tableData.length} 个激发态数据`, 'success');
+      showStatus(`成功解析 ${nGroups} 个优化步骤，共 ${allGroups.reduce((sum, group) => sum + group.length, 0)} 个激发态数据`, 'success');
+    }
+
+    function initializeStepSelector() {
+      if (allGroups.length === 0) {
+        stepSelector.classList.remove('active');
+        return;
+      }
+      
+      stepSelector.classList.add('active');
+      
+      // 更新步骤信息
+      stepInfo.textContent = `发现 ${allGroups.length} 个优化步骤，每步包含 ${allGroups.map(g => g.length + '个状态').join(', ')}`;
+      
+      // 设置滑块范围
+      stepRange.max = allGroups.length;
+      stepInput.max = allGroups.length;
+      
+      // 生成快速跳转按钮
+      generateQuickStepButtons();
+    }
+
+    function generateQuickStepButtons() {
+      quickStepsContainer.innerHTML = '';
+      
+      const totalSteps = allGroups.length;
+      if (totalSteps <= 20) {
+        // 少于20步，显示所有步骤
+        for (let i = 1; i <= totalSteps; i++) {
+          createQuickStepButton(i);
+        }
+      } else {
+        // 多于20步，显示关键步骤
+        const keySteps = [1, 5, 10, 25, 50, 75, 100, totalSteps];
+        keySteps.filter(step => step <= totalSteps).forEach(step => {
+          createQuickStepButton(step);
+        });
+        
+        // 添加中间步骤
+        if (totalSteps > 100) {
+          const interval = Math.floor(totalSteps / 10);
+          for (let i = interval; i < totalSteps; i += interval) {
+            if (!keySteps.includes(i)) {
+              createQuickStepButton(i);
+            }
+          }
+        }
+      }
+    }
+
+    function createQuickStepButton(step) {
+      const btn = document.createElement('button');
+      btn.className = 'quick-step-btn';
+      btn.textContent = step;
+      btn.addEventListener('click', () => setCurrentStep(step));
+      quickStepsContainer.appendChild(btn);
+    }
+
+    function setCurrentStep(step) {
+      currentStep = step;
+      currentPage = 1;
+      
+      // 更新UI
+      stepInput.value = step;
+      stepRange.value = step;
+      stepRangeDisplay.textContent = `步骤 ${step}`;
+      
+      // 更新按钮状态
+      prevStepBtn.disabled = step === 1;
+      nextStepBtn.disabled = step === allGroups.length;
+      
+      // 更新快速跳转按钮
+      document.querySelectorAll('.quick-step-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.textContent) === step);
+      });
+      
+      // 显示当前步骤的数据
+      currentTableData = allGroups[step - 1] || [];
+      renderTable();
     }
 
     function renderTable() {
+      if (currentTableData.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">没有数据</div>';
+        return;
+      }
+
       const startIndex = (currentPage - 1) * pageSize;
-      const endIndex = Math.min(startIndex + pageSize, tableData.length);
-      const pageData = tableData.slice(startIndex, endIndex);
+      const endIndex = Math.min(startIndex + pageSize, currentTableData.length);
+      const pageData = currentTableData.slice(startIndex, endIndex);
 
       let html = `
         <div class="table-container">
@@ -486,11 +754,11 @@
     }
 
     function renderPagination() {
-      if (tableData.length <= pageSize) return '';
+      if (currentTableData.length <= pageSize) return '';
 
-      const totalPages = Math.ceil(tableData.length / pageSize);
+      const totalPages = Math.ceil(currentTableData.length / pageSize);
       const startItem = (currentPage - 1) * pageSize + 1;
-      const endItem = Math.min(currentPage * pageSize, tableData.length);
+      const endItem = Math.min(currentPage * pageSize, currentTableData.length);
 
       let html = `
         <div class="pagination">
@@ -513,7 +781,7 @@
       html += `
           <button id="nextPage" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>
           <div class="pagination-info">
-            显示 ${startItem}-${endItem} 项，共 ${tableData.length} 项
+            步骤 ${currentStep}: 显示 ${startItem}-${endItem} 项，共 ${currentTableData.length} 项
           </div>
         </div>
       `;
@@ -530,7 +798,7 @@
       });
 
       document.getElementById('nextPage')?.addEventListener('click', () => {
-        const totalPages = Math.ceil(tableData.length / pageSize);
+        const totalPages = Math.ceil(currentTableData.length / pageSize);
         if (currentPage < totalPages) {
           currentPage++;
           renderTable();
@@ -548,31 +816,38 @@
     function handlePageSizeChange(e) {
       pageSize = parseInt(e.target.value);
       currentPage = 1;
-      if (tableData.length > 0) {
+      if (currentTableData.length > 0) {
         renderTable();
       }
     }
 
     function exportToCsv() {
-      if (!tableData.length) return;
+      if (!allGroups.length) return;
       
-      const header = 'State,μ(×10^-18 esu·cm),m(×10^-20 erg·G^-1),cosθ,g,g×1000';
-      const rows = tableData.map(r => `${r.state},${r.absmiu},${r.absm},${r.cosTheta},${r.g},${r.g1000}`);
-      const csvContent = header + '\n' + rows.join('\n');
+      let csvContent = '';
+      
+      // 导出所有步骤的数据
+      allGroups.forEach((group, stepIndex) => {
+        csvContent += `\n优化步骤 ${stepIndex + 1}\n`;
+        csvContent += 'State,μ(×10^-18 esu·cm),m(×10^-20 erg·G^-1),cosθ,g,g×1000\n';
+        group.forEach(r => {
+          csvContent += `${r.state},${r.absmiu},${r.absm},${r.cosTheta},${r.g},${r.g1000}\n`;
+        });
+      });
       
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `gaussian_cpl_gPL_${new Date().toISOString().split('T')[0]}.csv`;
+      a.download = `gaussian_cpl_gPL_all_steps_${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
       
-      showStatus('CSV 文件已导出', 'success');
+      showStatus('CSV 文件已导出（包含所有步骤）', 'success');
     }
 
     async function exportToWord() {
-      if (!tableData.length) return;
+      if (!allGroups.length) return;
 
       try {
         showStatus('正在生成 Word 文档...', 'loading');
@@ -582,37 +857,39 @@
           throw new Error('Word导出库未加载，请刷新页面重试');
         }
 
-        // 创建表格行数据
-        const tableRows = [
-          new docx.TableRow({
-            children: [
-              new docx.TableCell({ children: [new docx.Paragraph("State")] }),
-              new docx.TableCell({ children: [new docx.Paragraph("μ (×10⁻¹⁸ esu·cm)")] }),
-              new docx.TableCell({ children: [new docx.Paragraph("m (×10⁻²⁰ erg·G⁻¹)")] }),
-              new docx.TableCell({ children: [new docx.Paragraph("cosθ")] }),
-              new docx.TableCell({ children: [new docx.Paragraph("g")] }),
-              new docx.TableCell({ children: [new docx.Paragraph("g × 1000")] }),
-            ],
-          }),
-          ...tableData.map(row => new docx.TableRow({
-            children: [
-              new docx.TableCell({ children: [new docx.Paragraph(row.state.toString())] }),
-              new docx.TableCell({ children: [new docx.Paragraph(row.absmiu)] }),
-              new docx.TableCell({ children: [new docx.Paragraph(row.absm)] }),
-              new docx.TableCell({ children: [new docx.Paragraph(row.cosTheta)] }),
-              new docx.TableCell({ children: [new docx.Paragraph(row.g)] }),
-              new docx.TableCell({ children: [new docx.Paragraph(row.g1000)] }),
-            ],
-          }))
-        ];
+        const sections = [];
+        
+        // 为每个步骤创建表格
+        allGroups.forEach((group, stepIndex) => {
+          const tableRows = [
+            new docx.TableRow({
+              children: [
+                new docx.TableCell({ children: [new docx.Paragraph("State")] }),
+                new docx.TableCell({ children: [new docx.Paragraph("μ (×10⁻¹⁸ esu·cm)")] }),
+                new docx.TableCell({ children: [new docx.Paragraph("m (×10⁻²⁰ erg·G⁻¹)")] }),
+                new docx.TableCell({ children: [new docx.Paragraph("cosθ")] }),
+                new docx.TableCell({ children: [new docx.Paragraph("g")] }),
+                new docx.TableCell({ children: [new docx.Paragraph("g × 1000")] }),
+              ],
+            }),
+            ...group.map(row => new docx.TableRow({
+              children: [
+                new docx.TableCell({ children: [new docx.Paragraph(row.state.toString())] }),
+                new docx.TableCell({ children: [new docx.Paragraph(row.absmiu)] }),
+                new docx.TableCell({ children: [new docx.Paragraph(row.absm)] }),
+                new docx.TableCell({ children: [new docx.Paragraph(row.cosTheta)] }),
+                new docx.TableCell({ children: [new docx.Paragraph(row.g)] }),
+                new docx.TableCell({ children: [new docx.Paragraph(row.g1000)] }),
+              ],
+            }))
+          ];
 
-        const doc = new docx.Document({
-          sections: [{
+          sections.push({
             properties: {},
             children: [
               new docx.Paragraph({
                 children: [new docx.TextRun({ 
-                  text: "Gaussian CPL gPL 计算结果", 
+                  text: stepIndex === 0 ? "Gaussian CPL gPL 多步骤计算结果" : "", 
                   bold: true, 
                   size: 32 
                 })],
@@ -621,8 +898,9 @@
               }),
               new docx.Paragraph({
                 children: [new docx.TextRun({ 
-                  text: "计算说明：g = 4 × (m_cgs / μ_cgs) × cosθ × 0.01", 
-                  size: 24 
+                  text: `优化步骤 ${stepIndex + 1} (${group.length} 个激发态)`, 
+                  bold: true,
+                  size: 28 
                 })],
                 spacing: { after: 200 }
               }),
@@ -637,20 +915,23 @@
                   insideHorizontal: { style: docx.BorderStyle.SINGLE, size: 1 },
                   insideVertical: { style: docx.BorderStyle.SINGLE, size: 1 },
                 }
-              })
+              }),
+              new docx.Paragraph({ text: "" }) // 空行
             ]
-          }]
+          });
         });
+
+        const doc = new docx.Document({ sections });
 
         const buffer = await docx.Packer.toBlob(doc);
         const url = URL.createObjectURL(buffer);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `gaussian_cpl_gPL_results_${new Date().toISOString().split('T')[0]}.docx`;
+        a.download = `gaussian_cpl_gPL_all_steps_${new Date().toISOString().split('T')[0]}.docx`;
         a.click();
         URL.revokeObjectURL(url);
         
-        showStatus('Word 文档已导出', 'success');
+        showStatus('Word 文档已导出（包含所有步骤）', 'success');
         
       } catch (error) {
         console.error('Word 导出失败:', error);
