@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORCA SOC Analysis Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/docx@7.3.0/build/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <style>
+        .tab-button.active { 
+            border-bottom: 2px solid #3b82f6; 
+            color: #2563eb; 
+        }
+        .tab-content { 
+            display: none; 
+        }
+        .tab-content.active { 
+            display: block; 
+        }
+        .matrix-table { 
+            max-height: 400px; 
+            overflow-y: auto; 
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-6">
+        <div class="container mx-auto px-4 text-center">
+            <h1 class="text-3xl font-bold">ORCA Spin-Orbit Coupling Analysis Tool</h1>
+            <p class="mt-2">SOC Matrix Element Extraction and Visualization</p>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- File Upload -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">📁 Upload ORCA Output File</h2>
+            <input type="file" id="orcaFile" accept=".out,.log,.txt" class="w-full p-3 border rounded">
+            <button onclick="analyzeFile()" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                Analyze File
+            </button>
+        </div>
+
+        <!-- File Status -->
+        <div id="status" class="hidden bg-white rounded-lg shadow p-6 mb-6">
+            <h3 class="text-lg font-semibold mb-4">File Status</h3>
+            <div id="statusContent"></div>
+        </div>
+
+        <!-- Visualization Tabs -->
+        <div id="visualization" class="hidden bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold mb-4">Data Visualization</h3>
+            
+            <!-- Tab Navigation -->
+            <div class="border-b mb-6">
+                <nav class="flex space-x-8">
+                    <button onclick="switchTab('matrix')" class="tab-button py-2 px-1 active">SOC Matrix</button>
+                    <button onclick="switchTab('heatmap')" class="tab-button py-2 px-1">Heatmap</button>
+                </nav>
+            </div>
+
+            <!-- SOC Matrix Tab -->
+            <div id="matrixTab" class="tab-content active">
+                <div class="matrix-table border rounded">
+                    <table class="w-full text-sm">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="border p-2">T→S Transition</th>
+                                <th class="border p-2">Total Strength (cm⁻¹)</th>
+                                <th class="border p-2">Z Component</th>
+                                <th class="border p-2">X Component</th>
+                                <th class="border p-2">Y Component</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matrixTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Heatmap Tab -->
+            <div id="heatmapTab" class="tab-content">
+                <div class="mb-4 flex justify-between items-center">
+                    <div class="flex items-center space-x-4">
+                        <label>Display Mode:</label>
+                        <select id="heatmapMode" onchange="updateHeatmap()" class="border rounded px-2 py-1">
+                            <option value="total">Total Strength</option>
+                            <option value="z">Z Component</option>
+                            <option value="x">X Component</option>
+                            <option value="y">Y Component</option>
+                        </select>
+                    </div>
+                    <button onclick="downloadHeatmap()" class="bg-blue-600 text-white px-3 py-1 rounded">
+                        Download Image
+                    </button>
+                </div>
+                <canvas id="heatmapCanvas" width="800" height="600" class="border rounded"></canvas>
+            </div>
+
+        </div>
+
+        <!-- Export Options -->
+        <div id="export" class="hidden bg-white rounded-lg shadow p-6 mt-6">
+            <h3 class="text-lg font-semibold mb-4">Export Data</h3>
+            <div class="grid md:grid-cols-2 gap-4">
+                <button onclick="exportCSV()" class="bg-green-600 text-white px-4 py-2 rounded">
+                    Export CSV
+                </button>
+                <button onclick="exportWord()" class="bg-blue-600 text-white px-4 py-2 rounded">
+                    Export Word Report
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let socData = [];
+        let currentTab = 'matrix';
+        let animating = false;
+        let animationId = null;
+
+        // 文件分析
+        async function analyzeFile() {
+            const file = document.getElementById('orcaFile').files[0];
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            const content = await readFile(file);
+            const result = parseSOCData(content);
+            
+            displayStatus(result);
+            if (result.success) {
+                displaySOCMatrix();
+                showVisualization();
+                document.getElementById('export').classList.remove('hidden');
+            }
+        }
+
+        // 读取文件
+        function readFile(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.readAsText(file);
+            });
+        }
+
+        // 解析SOC数据
+        function parseSOCData(content) {
+            socData = [];
+            const lines = content.split('\n');
+            let inSOCSection = false;
+            let sectionType = '';
+
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
+                // 识别不同类型的SOC部分
+                if (line.includes('CALCULATED SOCME BETWEEN TRIPLETS AND SINGLETS')) {
+                    inSOCSection = true;
+                    // 跳过头部行直到找到数据行
+                    continue;
+                }
+                
+                if (line.includes('CALCULATED REDUCED SOCME BETWEEN TRIPLETS AND SINGLETS')) {
+                    inSOCSection = true;
+                    sectionType = 'reduced';
+                    continue;
+                }
+                
+                // 结束条件
+                if (inSOCSection && (line.includes('----') && lines[i+1] && lines[i+1].trim().includes('----'))) {
+                    inSOCSection = false;
+                    sectionType = '';
+                    continue;
+                }
+                
+                if (inSOCSection && line.includes('SOC stabilization')) {
+                    inSOCSection = false;
+                    break;
+                }
+                
+                // 解析数据行
+                if (inSOCSection && line.match(/^\s*\d+\s+\d+/)) {
+                    // 格式1: T S (Re, Im) (Re, Im) (Re, Im) - 原始格式
+                    let match = line.match(/(\d+)\s+(\d+)\s+\(\s*([-\d.e+-]+)\s*,\s*([-\d.e+-]+)\s*\)\s+\(\s*([-\d.e+-]+)\s*,\s*([-\d.e+-]+)\s*\)\s+\(\s*([-\d.e+-]+)\s*,\s*([-\d.e+-]+)\s*\)/);
+                    
+                    if (match) {
+                        const [, tState, sState, zRe, zIm, xRe, xIm, yRe, yIm] = match.map(Number);
+                        const zMag = Math.sqrt(zRe*zRe + zIm*zIm);
+                        const xMag = Math.sqrt(xRe*xRe + xIm*xIm);
+                        const yMag = Math.sqrt(yRe*yRe + yIm*yIm);
+                        const total = Math.sqrt(zMag*zMag + xMag*xMag + yMag*yMag);
+                        
+                        // 检查是否已存在相同的跃迁，如果存在则跳过
+                        const existingIndex = socData.findIndex(d => d.tState === tState && d.sState === sState);
+                        if (existingIndex === -1) {
+                            socData.push({
+                                tState, sState, zMag, xMag, yMag, total,
+                                transition: `T${tState}→S${sState}`
+                            });
+                        }
+                    } else if (sectionType === 'reduced') {
+                        // 格式2: I J value value value - reduced格式
+                        match = line.match(/(\d+)\s+(\d+)\s+([-\d.e+-]+)\s+([-\d.e+-]+)\s+([-\d.e+-]+)/);
+                        if (match) {
+                            const [, tState, sState, xVal, yVal, zVal] = match.map(Number);
+                            const zMag = Math.abs(zVal);
+                            const xMag = Math.abs(xVal);
+                            const yMag = Math.abs(yVal);
+                            const total = Math.sqrt(zMag*zMag + xMag*xMag + yMag*yMag);
+                            
+                            // 检查是否已存在相同的跃迁，如果存在则跳过
+                            const existingIndex = socData.findIndex(d => d.tState === tState && d.sState === sState);
+                            if (existingIndex === -1) {
+                                socData.push({
+                                    tState, sState, zMag, xMag, yMag, total,
+                                    transition: `T${tState}→S${sState}`
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            return {
+                success: socData.length > 0,
+                count: socData.length,
+                isValid: content.includes('ORCA'),
+                isComplete: content.includes('ORCA TERMINATED NORMALLY') || content.includes('SOC stabilization')
+            };
+        }
+
+        // 显示状态
+        function displayStatus(result) {
+            const statusDiv = document.getElementById('status');
+            const contentDiv = document.getElementById('statusContent');
+            
+            statusDiv.classList.remove('hidden');
+            
+            let html = '';
+            html += result.isValid ? '<div class="text-green-600">✅ Valid ORCA file</div>' : '<div class="text-red-600">❌ Invalid file</div>';
+            html += result.isComplete ? '<div class="text-green-600">✅ Calculation completed</div>' : '<div class="text-red-600">❌ Calculation incomplete</div>';
+            html += result.success ? `<div class="text-green-600">✅ Found ${result.count} SOC matrix elements</div>` : '<div class="text-red-600">❌ No SOC data found</div>';
+            
+            contentDiv.innerHTML = html;
+        }
+
+        // 显示SOC矩阵
+        function displaySOCMatrix() {
+            const tableBody = document.getElementById('matrixTableBody');
+            const sortedData = [...socData].sort((a, b) => b.total - a.total);
+            
+            tableBody.innerHTML = '';
+            sortedData.forEach(item => {
+                const row = tableBody.insertRow();
+                const colorClass = item.total > 10 ? 'bg-red-50' : item.total > 1 ? 'bg-yellow-50' : 'bg-green-50';
+                row.className = colorClass;
+                
+                row.innerHTML = `
+                    <td class="border p-2 font-bold">${item.transition}</td>
+                    <td class="border p-2 text-purple-600 font-bold">${item.total.toFixed(2)}</td>
+                    <td class="border p-2">${item.zMag.toFixed(2)}</td>
+                    <td class="border p-2">${item.xMag.toFixed(2)}</td>
+                    <td class="border p-2">${item.yMag.toFixed(2)}</td>
+                `;
+            });
+        }
+
+        // 显示可视化
+        function showVisualization() {
+            document.getElementById('visualization').classList.remove('hidden');
+            drawHeatmap();
+        }
+
+        // 标签切换
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`[onclick="switchTab('${tab}')"]`).classList.add('active');
+            document.getElementById(tab + 'Tab').classList.add('active');
+            
+            if (tab === 'heatmap') {
+                setTimeout(drawHeatmap, 100);
+            }
+        }
+
+        // HSV转RGB函数
+        function hsvToRgb(h, s, v) {
+            let r, g, b;
+            const i = Math.floor(h * 6);
+            const f = h * 6 - i;
+            const p = v * (1 - s);
+            const q = v * (1 - f * s);
+            const t = v * (1 - (1 - f) * s);
+            
+            switch (i % 6) {
+                case 0: r = v; g = t; b = p; break;
+                case 1: r = q; g = v; b = p; break;
+                case 2: r = p; g = v; b = t; break;
+                case 3: r = p; g = q; b = v; break;
+                case 4: r = t; g = p; b = v; break;
+                case 5: r = v; g = p; b = q; break;
+            }
+            
+            return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+        }
+
+        // 绘制热图
+        function drawHeatmap() {
+            const canvas = document.getElementById('heatmapCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 设置一个优雅的渐变背景
+            const bgGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            bgGradient.addColorStop(0, '#fdfbfb');
+            bgGradient.addColorStop(1, '#ebedee');
+            ctx.fillStyle = bgGradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 获取唯一态并排序
+            const sStates = [...new Set(socData.map(d => d.sState))].sort((a,b) => a-b);
+            const tStates = [...new Set(socData.map(d => d.tState))].sort((a,b) => a-b);
+            
+            if (sStates.length === 0 || tStates.length === 0) return;
+
+            const margin = { top: 100, right: 150, bottom: 100, left: 120 };
+            const chartWidth = canvas.width - margin.left - margin.right;
+            const chartHeight = canvas.height - margin.top - margin.bottom;
+            
+            const cellWidth = chartWidth / sStates.length;
+            const cellHeight = chartHeight / tStates.length;
+            
+            const mode = document.getElementById('heatmapMode').value;
+            const values = socData.map(d => d[mode === 'total' ? 'total' : mode + 'Mag']);
+            const maxValue = Math.max(...values, 0);
+            
+            // 绘制热图单元格
+            tStates.forEach((t, i) => {
+                sStates.forEach((s, j) => {
+                    const dataPoint = socData.find(d => d.tState === t && d.sState === s);
+                    const value = dataPoint ? dataPoint[mode === 'total' ? 'total' : mode + 'Mag'] : 0;
+                    
+                    const x = margin.left + j * cellWidth;
+                    const y = margin.top + i * cellHeight;
+                    
+                    // 粉红到红色的现代渐变
+                    const intensity = maxValue > 0 ? value / maxValue : 0;
+                    let color;
+                    if (intensity <= 0.01) {
+                        color = 'rgba(236, 240, 241, 0.5)'; // 非常弱的值用半透明灰色
+                    } else {
+                        // 线性插值: 粉色 (255, 192, 203) -> 红色 (220, 20, 60)
+                        const r = Math.round(255 + (220 - 255) * intensity);
+                        const g = Math.round(192 + (20 - 192) * intensity);
+                        const b = Math.round(203 + (60 - 203) * intensity);
+                        color = `rgb(${r}, ${g}, ${b})`;
+                    }
+                    
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.roundRect(x + 3, y + 3, cellWidth - 6, cellHeight - 6, 10);
+                    ctx.fill();
+                    
+                    // 为所有单元格添加边框以确保可见性
+                    ctx.strokeStyle = 'rgba(200, 200, 200, 0.9)'; // 浅灰色边框
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+
+                    // 显示数值，包括0.0
+                    const textColor = '#000000'; // 统一使用黑色字体
+                    
+                    const textX = x + cellWidth / 2;
+                    const textY = y + cellHeight / 2;
+
+                    // 添加"磨砂玻璃"背景以提高可读性
+                    ctx.font = 'bold 14px "Segoe UI",-apple-system,BlinkMacSystemFont,sans-serif';
+                    const textMetrics = ctx.measureText(value.toFixed(1));
+                    const textWidth = textMetrics.width;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; // 半透明白色背景
+                    ctx.beginPath();
+                    ctx.roundRect(textX - textWidth / 2 - 4, textY - 10, textWidth + 8, 20, 6);
+                    ctx.fill();
+
+                    ctx.fillStyle = textColor;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(value.toFixed(1), textX, textY);
+                });
+            });
+            
+            // 绘制轴标签
+            ctx.fillStyle = '#34495e';
+            ctx.font = `bold 16px "Segoe UI",-apple-system,BlinkMacSystemFont,sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // X轴标签 (S态)
+            sStates.forEach((s, j) => {
+                ctx.fillText(
+                    `S${s}`,
+                    margin.left + j * cellWidth + cellWidth / 2,
+                    margin.top + chartHeight + 30
+                );
+            });
+            
+            // Y轴标签 (T态) - 从T1开始
+            tStates.forEach((t, i) => {
+                ctx.fillText(
+                    `T${t}`,
+                    margin.left - 40,
+                    margin.top + i * cellHeight + cellHeight / 2
+                );
+            });
+            
+            // 坐标轴标题
+            ctx.font = `bold 20px "Segoe UI",-apple-system,BlinkMacSystemFont,sans-serif`;
+            ctx.fillText('Singlet States', canvas.width / 2, canvas.height - 30);
+            
+            ctx.save();
+            ctx.translate(40, canvas.height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Triplet States', 0, 0);
+            ctx.restore();
+            
+            // 颜色条
+            const colorBarWidth = 25;
+            const colorBarHeight = chartHeight / 1.5;
+            const colorBarX = canvas.width - margin.right + 40;
+            const colorBarY = margin.top + (chartHeight - colorBarHeight) / 2;
+            
+            const cGradient = ctx.createLinearGradient(0, colorBarY, 0, colorBarY + colorBarHeight);
+            cGradient.addColorStop(0, 'rgb(220, 20, 60)');   // Top (max value)
+            cGradient.addColorStop(1, 'rgb(255, 192, 203)'); // Bottom (min value)
+
+            ctx.fillStyle = cGradient;
+            ctx.beginPath();
+            ctx.roundRect(colorBarX, colorBarY, colorBarWidth, colorBarHeight, 12);
+            ctx.fill();
+            
+            // 颜色条标签
+            ctx.fillStyle = '#34495e';
+            ctx.font = `bold 14px "Segoe UI",-apple-system,BlinkMacSystemFont,sans-serif`;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillText(maxValue.toFixed(1), colorBarX - 10, colorBarY);
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('0.0', colorBarX - 10, colorBarY + colorBarHeight);
+            
+            // 颜色条标题（垂直）
+            ctx.save();
+            ctx.translate(colorBarX + colorBarWidth + 20, colorBarY + colorBarHeight / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.textAlign = 'center';
+            ctx.fillText('SOC Strength (cm⁻¹)', 0, 0);
+            ctx.restore();
+        }
+        
+        function updateHeatmap() {
+            drawHeatmap();
+        }
+        
+        function downloadHeatmap() {
+            const canvas = document.getElementById('heatmapCanvas');
+            const link = document.createElement('a');
+            link.download = 'soc_heatmap.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        // 绘制Jablonski图
+        function drawJablonski(time = 0) {
+            const canvas = document.getElementById('jablonskiCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const margin = 80;
+            const width = canvas.width - 2 * margin;
+            const height = canvas.height - 2 * margin;
+            
+            // 获取唯一态
+            const sStates = [...new Set(socData.map(d => d.sState))].sort((a,b) => a-b);
+            const tStates = [...new Set(socData.map(d => d.tState))].sort((a,b) => a-b);
+            
+            // 估算能级，增加间距以避免重叠
+            const levels = [];
+            sStates.forEach((s, index) => {
+                levels.push({
+                    energy: s === 0 ? 0 : 30000 + s * 8000, // 增加间距
+                    label: s === 0 ? 'S₀' : `S${s}`,
+                    type: 'singlet',
+                    state: s,
+                    x: margin + width * 0.25,
+                    index: index
+                });
+            });
+            
+            tStates.forEach((t, index) => {
+                levels.push({
+                    energy: 20000 + t * 6000, // 增加间距
+                    label: `T${t}`,
+                    type: 'triplet',
+                    state: t,
+                    x: margin + width * 0.75,
+                    index: index
+                });
+            });
+            
+            const maxE = Math.max(...levels.map(l => l.energy)) * 1.1;
+            
+            // 绘制能级
+            levels.forEach(level => {
+                const y = margin + height - (level.energy / maxE) * height;
+                
+                // 动画效果
+                let opacity = 1;
+                if (animating) {
+                    opacity = 0.7 + 0.3 * Math.sin(time * 0.002 + level.energy * 0.0001);
+                }
+                
+                ctx.globalAlpha = opacity;
+                ctx.strokeStyle = level.type === 'singlet' ? '#2563eb' : '#dc2626';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(level.x - 60, y);
+                ctx.lineTo(level.x + 60, y);
+                ctx.stroke();
+                
+                // 标签 - 增加垂直偏移以避免重叠
+                ctx.fillStyle = level.type === 'singlet' ? '#2563eb' : '#dc2626';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                
+                // 如果能级太近，交替显示标签位置
+                const labelOffset = (level.index % 2 === 0) ? -10 : -25;
+                ctx.fillText(level.label, level.x, y + labelOffset);
+                
+                // 显示能量值
+                ctx.fillStyle = '#666';
+                ctx.font = '10px Arial';
+                ctx.fillText(`${(level.energy/1000).toFixed(1)}k`, level.x + 70, y + 3);
+                
+                ctx.globalAlpha = 1;
+            });
+            
+            // 绘制SOC跃迁
+            const threshold = parseFloat(document.getElementById('threshold').value);
+            const filtered = socData.filter(d => d.total >= threshold);
+            
+            // 对跃迁进行排序，避免重叠
+            const sortedFiltered = filtered.sort((a, b) => b.total - a.total);
+            
+            sortedFiltered.forEach((soc, i) => {
+                const sLevel = levels.find(l => l.type === 'singlet' && l.state === soc.sState);
+                const tLevel = levels.find(l => l.type === 'triplet' && l.state === soc.tState);
+                
+                if (sLevel && tLevel) {
+                    const sy = margin + height - (sLevel.energy / maxE) * height;
+                    const ty = margin + height - (tLevel.energy / maxE) * height;
+                    
+                    // 动画效果
+                    let arrowOpacity = 0.8;
+                    if (animating) {
+                        arrowOpacity = 0.4 + 0.4 * Math.sin(time * 0.003 + i * 0.5);
+                    }
+                    
+                    ctx.globalAlpha = arrowOpacity;
+                    ctx.strokeStyle = '#f59e0b';
+                    ctx.lineWidth = Math.max(1, Math.min(5, soc.total / 5)); // 限制线宽
+                    
+                    // 绘制弯曲箭头，增加垂直偏移以避免重叠
+                    const midX = (sLevel.x + tLevel.x) / 2;
+                    const verticalOffset = 60 + (i % 3) * 20; // 交替偏移
+                    const midY = Math.min(sy, ty) - verticalOffset;
+                    
+                    ctx.setLineDash([5, 5]);
+                    ctx.beginPath();
+                    ctx.moveTo(sLevel.x, sy);
+                    ctx.quadraticCurveTo(midX, midY, tLevel.x, ty);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // 箭头头部
+                    const angle = Math.atan2(ty - midY, tLevel.x - midX);
+                    const arrowSize = 8;
+                    ctx.beginPath();
+                    ctx.moveTo(tLevel.x, ty);
+                    ctx.lineTo(tLevel.x - arrowSize * Math.cos(angle - 0.3), ty - arrowSize * Math.sin(angle - 0.3));
+                    ctx.moveTo(tLevel.x, ty);
+                    ctx.lineTo(tLevel.x - arrowSize * Math.cos(angle + 0.3), ty - arrowSize * Math.sin(angle + 0.3));
+                    ctx.stroke();
+                    
+                    // SOC数值标签，避免重叠
+                    ctx.fillStyle = '#f59e0b';
+                    ctx.font = 'bold 10px Arial';
+                    ctx.textAlign = 'center';
+                    
+                    // 为强SOC显示数值
+                    if (soc.total > threshold) {
+                        ctx.fillText(soc.total.toFixed(1), midX, midY - 5);
+                    }
+                    
+                    ctx.globalAlpha = 1;
+                }
+            });
+            
+            // 绘制坐标轴
+            ctx.strokeStyle = '#6b7280';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(margin - 20, margin);
+            ctx.lineTo(margin - 20, margin + height);
+            ctx.stroke();
+            
+            // 能量刻度
+            for (let i = 0; i <= 5; i++) {
+                const y = margin + height - (i / 5) * height;
+                const energy = (i / 5) * maxE;
+                
+                ctx.strokeStyle = '#6b7280';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(margin - 25, y);
+                ctx.lineTo(margin - 15, y);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#6b7280';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText((energy/1000).toFixed(1), margin - 30, y + 3);
+            }
+            
+            // 标签
+            ctx.fillStyle = '#1f2937';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Singlet States', margin + width * 0.25, height + margin + 30);
+            ctx.fillText('Triplet States', margin + width * 0.75, height + margin + 30);
+            
+            // Y轴标签
+            ctx.save();
+            ctx.translate(20, margin + height/2);
+            ctx.rotate(-Math.PI/2);
+            ctx.fillText('Energy (×10³ cm⁻¹)', 0, 0);
+            ctx.restore();
+        }
+
+        // 动画控制
+        function toggleAnimation() {
+            const btn = document.getElementById('animBtn');
+            if (animating) {
+                animating = false;
+                cancelAnimationFrame(animationId);
+                btn.textContent = 'Start Animation';
+                btn.className = 'bg-green-600 text-white px-3 py-1 rounded';
+                drawJablonski();
+            } else {
+                animating = true;
+                btn.textContent = 'Stop Animation';
+                btn.className = 'bg-red-600 text-white px-3 py-1 rounded';
+                animate();
+            }
+        }
+
+        function animate() {
+            if (!animating) return;
+            drawJablonski(Date.now());
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function updateJablonski() {
+            if (animating) return;
+            drawJablonski();
+        }
+
+        // 下载Jablonski图
+        function downloadJablonski() {
+            const canvas = document.getElementById('jablonskiCanvas');
+            const link = document.createElement('a');
+            link.download = 'jablonski_diagram.png';
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+
+        // 导出功能
+        function exportCSV() {
+            let csv = 'T State,S State,Total Strength,Z Component,X Component,Y Component\n';
+            socData.forEach(d => {
+                csv += `${d.tState},${d.sState},${d.total.toFixed(3)},${d.zMag.toFixed(3)},${d.xMag.toFixed(3)},${d.yMag.toFixed(3)}\n`;
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const link = document.createElement('a');
+            link.download = 'soc_data.csv';
+            link.href = URL.createObjectURL(blob);
+            link.click();
+        }
+
+        async function exportWord() {
+            try {
+                // 计算统计数据
+                const maxSOC = socData.length > 0 ? Math.max(...socData.map(d => d.total)) : 0;
+                const avgSOC = socData.length > 0 ? socData.reduce((sum, d) => sum + d.total, 0) / socData.length : 0;
+                
+                // 获取所有跃迁数据并排序
+                const allTransitions = [...socData].sort((a, b) => b.total - a.total);
+                
+                // 获取图像数据
+                const heatmapCanvas = document.getElementById('heatmapCanvas');
+                
+                // 创建所有跃迁表格的行
+                const transitionRows = [
+                    new docx.TableRow({
+                        children: [
+                            new docx.TableCell({ children: [new docx.Paragraph({ text: "Transition", style: "Strong" })], shading: { fill: "f2f2f2" } }),
+                            new docx.TableCell({ children: [new docx.Paragraph({ text: "Total Strength (cm⁻¹)", style: "Strong" })], shading: { fill: "f2f2f2" } }),
+                            new docx.TableCell({ children: [new docx.Paragraph({ text: "Z Component", style: "Strong" })], shading: { fill: "f2f2f2" } }),
+                            new docx.TableCell({ children: [new docx.Paragraph({ text: "X Component", style: "Strong" })], shading: { fill: "f2f2f2" } }),
+                            new docx.TableCell({ children: [new docx.Paragraph({ text: "Y Component", style: "Strong" })], shading: { fill: "f2f2f2" } }),
+                        ],
+                    })
+                ];
+
+                allTransitions.forEach(item => {
+                    transitionRows.push(new docx.TableRow({
+                        children: [
+                            new docx.TableCell({ children: [new docx.Paragraph(item.transition)] }),
+                            new docx.TableCell({ children: [new docx.Paragraph(item.total.toFixed(2))] }),
+                            new docx.TableCell({ children: [new docx.Paragraph(item.zMag.toFixed(2))] }),
+                            new docx.TableCell({ children: [new docx.Paragraph(item.xMag.toFixed(2))] }),
+                            new docx.TableCell({ children: [new docx.Paragraph(item.yMag.toFixed(2))] }),
+                        ],
+                    }));
+                });
+
+                // 创建Word文档
+                const doc = new docx.Document({
+                    sections: [{
+                        properties: {},
+                        children: [
+                            // 标题
+                            new docx.Paragraph({
+                                text: "ORCA Spin-Orbit Coupling Analysis Report",
+                                heading: docx.HeadingLevel.TITLE,
+                                alignment: docx.AlignmentType.CENTER
+                            }),
+                            new docx.Paragraph({
+                                text: `Generated: ${new Date().toLocaleString()}`,
+                                alignment: docx.AlignmentType.CENTER,
+                                style: "IntenseQuote"
+                            }),
+                            new docx.Paragraph({ text: "" }),
+                            
+                            // 数据概览
+                            new docx.Paragraph({
+                                text: "Data Overview",
+                                heading: docx.HeadingLevel.HEADING_1
+                            }),
+                            new docx.Table({
+                                width: { size: 100, type: docx.WidthType.PERCENTAGE },
+                                rows: [
+                                    new docx.TableRow({
+                                        children: [
+                                            new docx.TableCell({ children: [new docx.Paragraph("Total Elements")], shading: { fill: "f2f2f2" } }),
+                                            new docx.TableCell({ children: [new docx.Paragraph("Max Strength (cm⁻¹)")], shading: { fill: "f2f2f2" } }),
+                                            new docx.TableCell({ children: [new docx.Paragraph("Avg Strength (cm⁻¹)")], shading: { fill: "f2f2f2" } }),
+                                        ],
+                                    }),
+                                    new docx.TableRow({
+                                        children: [
+                                            new docx.TableCell({ children: [new docx.Paragraph(String(socData.length))] }),
+                                            new docx.TableCell({ children: [new docx.Paragraph(maxSOC.toFixed(2))] }),
+                                            new docx.TableCell({ children: [new docx.Paragraph(avgSOC.toFixed(2))] }),
+                                        ],
+                                    }),
+                                ],
+                            }),
+                            new docx.Paragraph({ text: "" }),
+
+                            // 热力图
+                            new docx.Paragraph({
+                                text: "SOC Heatmap",
+                                heading: docx.HeadingLevel.HEADING_1
+                            }),
+                            new docx.Paragraph({
+                                children: [
+                                    new docx.ImageRun({
+                                        data: heatmapCanvas.toDataURL('image/png'),
+                                        transformation: {
+                                            width: 600,
+                                            height: 450
+                                        }
+                                    })
+                                ],
+                                alignment: docx.AlignmentType.CENTER
+                            }),
+                            new docx.Paragraph({ text: "Heatmap of SOC matrix elements.", alignment: docx.AlignmentType.CENTER, style: "Caption" }),
+                            
+                            // 重要跃迁表格
+                            new docx.Paragraph({
+                                text: "All Transitions",
+                                heading: docx.HeadingLevel.HEADING_1,
+                                pageBreakBefore: true,
+                            }),
+                            new docx.Table({
+                                width: { size: 100, type: docx.WidthType.PERCENTAGE },
+                                rows: transitionRows
+                            }),
+                        ]
+                    }]
+                });
+                
+                // 生成文档
+                const blob = await docx.Packer.toBlob(doc);
+                saveAs(blob, 'SOC_Analysis_Report.docx');
+                
+            } catch (error) {
+                console.error('Word export failed:', error);
+                alert('Word export failed. Please check the console for details.');
+            }
+        }
+    </script>
+</body>
+</html>
