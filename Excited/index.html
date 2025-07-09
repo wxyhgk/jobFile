@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORCA CPL参数提取器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .file-drop-zone {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s ease;
+        }
+        .file-drop-zone:hover,
+        .file-drop-zone.dragover {
+            border-color: #4299e1;
+            background-color: #ebf8ff;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- 标题 -->
+        <div class="text-center mb-8">
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">ORCA CPL参数提取器</h1>
+            <p class="text-gray-600">提取 absmiu、absm、theta、glum 参数</p>
+        </div>
+
+        <!-- 文件上传 -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="file-drop-zone rounded-lg p-6 text-center cursor-pointer" id="dropZone">
+                <p class="text-gray-600 mb-2">点击或拖拽上传ORCA输出文件</p>
+                <p class="text-sm text-gray-500">支持 .out, .log, .txt 格式</p>
+                <input type="file" id="fileInput" class="hidden" accept=".out,.log,.txt">
+            </div>
+            
+            <!-- 进度条 -->
+            <div id="progressContainer" class="hidden mt-4">
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-blue-600 h-2 rounded-full" id="progressBar" style="width: 0%"></div>
+                </div>
+                <p class="text-sm text-gray-600 mt-2" id="progressText">处理中...</p>
+            </div>
+        </div>
+
+        <!-- 参数说明 -->
+        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+            <h3 class="font-semibold text-blue-800 mb-2">参数说明</h3>
+            <div class="text-blue-700 text-sm grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div><strong>absmiu:</strong> 电偶极矩绝对值 (×10⁻¹⁸ esu·cm)</div>
+                <div><strong>absm:</strong> 磁偶极矩绝对值 (×10⁻²⁰ erg·G⁻¹)</div>
+                <div><strong>theta:</strong> 电磁偶极矩夹角 (度)</div>
+                <div><strong>glum:</strong> 发光不对称因子 (无量纲)</div>
+            </div>
+        </div>
+
+        <!-- 结果表格 -->
+        <div id="results" class="hidden">
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-semibold text-gray-800">CPL参数提取结果</h3>
+                    <div class="space-x-2">
+                        <span class="text-sm text-gray-600">找到 <span id="stateCount" class="font-bold">0</span> 个状态</span>
+                        <button id="exportBtn" class="bg-green-500 hover:bg-green-600 text-white text-sm px-4 py-2 rounded">
+                            导出CSV
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100">
+                                <th class="border px-3 py-2 text-left">State</th>
+                                <th class="border px-3 py-2 text-left">λ (nm)</th>
+                                <th class="border px-3 py-2 text-left">DX (au)</th>
+                                <th class="border px-3 py-2 text-left">DY (au)</th>
+                                <th class="border px-3 py-2 text-left">DZ (au)</th>
+                                <th class="border px-3 py-2 text-left">MX (au)</th>
+                                <th class="border px-3 py-2 text-left">MY (au)</th>
+                                <th class="border px-3 py-2 text-left">MZ (au)</th>
+                                <th class="border px-3 py-2 text-left bg-yellow-50">|μ| (au)</th>
+                                <th class="border px-3 py-2 text-left bg-yellow-50">|m| (au)</th>
+                                <th class="border px-3 py-2 text-left bg-yellow-50">absmiu<br><span class="text-xs font-normal">(×10⁻¹⁸ esu·cm)</span></th>
+                                <th class="border px-3 py-2 text-left bg-yellow-50">absm<br><span class="text-xs font-normal">(×10⁻²⁰ erg·G⁻¹)</span></th>
+                                <th class="border px-3 py-2 text-left bg-yellow-50">theta<br><span class="text-xs font-normal"></span></th>
+                                <th class="border px-3 py-2 text-left bg-yellow-50">glum<br><span class="text-xs font-normal"></span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTable">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 状态提示 -->
+        <div id="status" class="text-center text-gray-600 py-8">
+            请上传ORCA输出文件开始分析
+        </div>
+    </div>
+
+    <script>
+        class ORCACPLExtractor {
+            constructor() {
+                this.data = [];
+                this.initializeEventListeners();
+            }
+            
+            initializeEventListeners() {
+                const dropZone = document.getElementById('dropZone');
+                const fileInput = document.getElementById('fileInput');
+                
+                dropZone.addEventListener('click', () => fileInput.click());
+                
+                dropZone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('dragover');
+                });
+                
+                dropZone.addEventListener('dragleave', () => {
+                    dropZone.classList.remove('dragover');
+                });
+                
+                dropZone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('dragover');
+                    if (e.dataTransfer.files.length > 0) {
+                        this.handleFile(e.dataTransfer.files[0]);
+                    }
+                });
+                
+                fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.handleFile(e.target.files[0]);
+                    }
+                });
+                
+                document.getElementById('exportBtn').addEventListener('click', () => this.exportCSV());
+            }
+            
+            async handleFile(file) {
+                this.showProgress();
+                document.getElementById('status').textContent = '正在处理文件...';
+                document.getElementById('results').classList.add('hidden');
+                
+                try {
+                    const content = await this.readFile(file);
+                    this.parseORCAOutput(content);
+                    this.displayResults();
+                    document.getElementById('status').textContent = '处理完成！';
+                } catch (error) {
+                    document.getElementById('status').textContent = '文件处理失败: ' + error.message;
+                }
+                
+                this.hideProgress();
+            }
+            
+            readFile(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = reject;
+                    reader.readAsText(file);
+                });
+            }
+            
+            parseORCAOutput(content) {
+                const lines = content.split('\n');
+                this.data = [];
+                
+                let inElectricDipoleSection = false;
+                let inMagneticDipoleSection = false;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    
+                    // 检测电偶极矩部分
+                    if (line.includes('ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS')) {
+                        inElectricDipoleSection = true;
+                        inMagneticDipoleSection = false;
+                        continue;
+                    }
+                    
+                    // 检测磁偶极矩部分
+                    if (line.includes('CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS')) {
+                        inMagneticDipoleSection = true;
+                        inElectricDipoleSection = false;
+                        continue;
+                    }
+                    
+                    // 跳过表头和分割线
+                    if (line.includes('State') || line.includes('---') || 
+                        line.includes('(eV)') || line.includes('(cm-1)') ||
+                        line.includes('(nm)') || line.includes('(au)') ||
+                        line.includes('Energy') || line.includes('Wavelength') ||
+                        line.includes('fosc') || line.includes('T2') ||
+                        line.includes('TX') || line.includes('TY') || line.includes('TZ') ||
+                        line.includes('MX') || line.includes('MY') || line.includes('MZ')) {
+                        continue;
+                    }
+                    
+                    // 提取电偶极矩数据
+                    if (inElectricDipoleSection && line.length > 0 && !line.includes('=')) {
+                        this.extractElectricDipoleData(line);
+                    }
+                    
+                    // 提取磁偶极矩数据
+                    if (inMagneticDipoleSection && line.length > 0 && !line.includes('=')) {
+                        this.extractMagneticDipoleData(line);
+                    }
+                    
+                    // 检测新段落开始
+                    if (line.includes('ABSORPTION SPECTRUM') || 
+                        line.includes('FLUORESCENCE') ||
+                        line.includes('NORMAL TERMINATION') || 
+                        line.includes('FINAL SINGLE POINT ENERGY')) {
+                        inElectricDipoleSection = false;
+                        inMagneticDipoleSection = false;
+                    }
+                }
+                
+                this.calculateCPLParameters();
+            }
+            
+            extractElectricDipoleData(line) {
+                const parts = line.split(/\s+/);
+                
+                if (line.includes('->') && parts.length >= 10) {
+                    const transitionMatch = line.match(/(\d+)-\w+\s*->\s*(\d+)-\w+/);
+                    if (transitionMatch) {
+                        const stateNum = parseInt(transitionMatch[2]);
+                        const wavelength = parseFloat(parts[5]) || 0;
+                        const DX = parseFloat(parts[8]) || 0;
+                        const DY = parseFloat(parts[9]) || 0;
+                        const DZ = parseFloat(parts[10]) || 0;
+                        
+                        if (stateNum > 0 && wavelength > 0) {
+                            this.updateStateData(stateNum, { wavelength, DX, DY, DZ });
+                        }
+                    }
+                }
+            }
+            
+            extractMagneticDipoleData(line) {
+                const parts = line.split(/\s+/);
+                
+                if (line.includes('->') && parts.length >= 9) {
+                    const transitionMatch = line.match(/(\d+)-\w+\s*->\s*(\d+)-\w+/);
+                    if (transitionMatch) {
+                        const stateNum = parseInt(transitionMatch[2]);
+                        const MX = parseFloat(parts[7]) || 0;
+                        const MY = parseFloat(parts[8]) || 0;
+                        const MZ = parseFloat(parts[9]) || 0;
+                        
+                        if (stateNum > 0) {
+                            this.updateStateData(stateNum, { MX, MY, MZ });
+                        }
+                    }
+                }
+            }
+            
+            updateStateData(stateNum, newData) {
+                let stateData = this.data.find(d => d.state === stateNum);
+                if (!stateData) {
+                    stateData = {
+                        state: stateNum,
+                        wavelength: 0,
+                        DX: 0, DY: 0, DZ: 0,
+                        MX: 0, MY: 0, MZ: 0
+                    };
+                    this.data.push(stateData);
+                }
+                Object.assign(stateData, newData);
+            }
+            
+            calculateCPLParameters() {
+                const AU_TO_ESU_CM = 2.541746473;
+                const AU_TO_ERG_PER_G = 1.854802;
+                
+                this.data.forEach(state => {
+                    // 计算电偶极矩绝对值
+                    const absmiu_au = Math.sqrt(state.DX*state.DX + state.DY*state.DY + state.DZ*state.DZ);
+                    
+                    // 计算磁偶极矩绝对值
+                    const absm_au = Math.sqrt(state.MX*state.MX + state.MY*state.MY + state.MZ*state.MZ);
+                    
+                    // 转换到CGS单位
+                    state.absmiu = absmiu_au * AU_TO_ESU_CM;
+                    state.absm = absm_au * AU_TO_ERG_PER_G * 1000;
+                    
+                    // 计算角度
+                    if (absmiu_au > 0 && absm_au > 0) {
+                        const dotProduct = state.DX*state.MX + state.DY*state.MY + state.DZ*state.MZ;
+                        const cosTheta = dotProduct / (absmiu_au * absm_au);
+                        const clampedCosTheta = Math.max(-1, Math.min(1, cosTheta));
+                        state.theta = Math.acos(clampedCosTheta) * 180 / Math.PI;
+                    } else {
+                        state.theta = 0;
+                    }
+                    
+                    // 计算glum（简化近似）
+                    if (absmiu_au > 0) {
+                        const dotProduct = state.DX*state.MX + state.DY*state.MY + state.DZ*state.MZ;
+                        const correctionFactor = 0.001;
+                        state.glum = 4 * dotProduct * correctionFactor / (absmiu_au * absmiu_au);
+                        
+                        if (Math.abs(state.glum) > 0.1) {
+                            state.glum = state.glum > 0 ? 0.1 : -0.1;
+                        }
+                    } else {
+                        state.glum = 0;
+                    }
+                    
+                    state.absmiu_au = absmiu_au;
+                    state.absm_au = absm_au;
+                });
+                
+                this.data = this.data
+                    .filter(state => state.absmiu_au > 0 || state.absm_au > 0)
+                    .sort((a, b) => a.state - b.state);
+            }
+            
+            displayResults() {
+                const tableBody = document.getElementById('resultsTable');
+                tableBody.innerHTML = '';
+                
+                this.data.forEach(state => {
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-50';
+                    
+                    let glumDisplay;
+                    if (Math.abs(state.glum) >= 0.001) {
+                        glumDisplay = state.glum.toFixed(6);
+                    } else if (Math.abs(state.glum) >= 0.000001) {
+                        glumDisplay = state.glum.toFixed(8);
+                    } else if (state.glum === 0) {
+                        glumDisplay = "0.000000";
+                    } else {
+                        glumDisplay = state.glum.toExponential(3);
+                    }
+                    
+                    row.innerHTML = `
+                        <td class="border px-3 py-2">${state.state}</td>
+                        <td class="border px-3 py-2">${state.wavelength.toFixed(1)}</td>
+                        <td class="border px-3 py-2">${state.DX.toFixed(5)}</td>
+                        <td class="border px-3 py-2">${state.DY.toFixed(5)}</td>
+                        <td class="border px-3 py-2">${state.DZ.toFixed(5)}</td>
+                        <td class="border px-3 py-2">${state.MX.toFixed(5)}</td>
+                        <td class="border px-3 py-2">${state.MY.toFixed(5)}</td>
+                        <td class="border px-3 py-2">${state.MZ.toFixed(5)}</td>
+                        <td class="border px-3 py-2 bg-yellow-50">${state.absmiu_au.toFixed(5)}</td>
+                        <td class="border px-3 py-2 bg-yellow-50">${state.absm_au.toFixed(5)}</td>
+                        <td class="border px-3 py-2 bg-yellow-50 font-medium">${state.absmiu.toFixed(3)}</td>
+                        <td class="border px-3 py-2 bg-yellow-50 font-medium">${state.absm.toFixed(3)}</td>
+                        <td class="border px-3 py-2 bg-yellow-50 font-medium">${state.theta.toFixed(2)}</td>
+                        <td class="border px-3 py-2 bg-yellow-50 font-medium">${glumDisplay}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+                
+                document.getElementById('stateCount').textContent = this.data.length;
+                document.getElementById('results').classList.remove('hidden');
+            }
+            
+            exportCSV() {
+                const header = 'State,Wavelength(nm),DX(au),DY(au),DZ(au),MX(au),MY(au),MZ(au),|μ|(au),|m|(au),absmiu(×10⁻¹⁸ esu·cm),absm(×10⁻²⁰ erg·G⁻¹),theta(度),glum(无量纲)\n';
+                const csv = this.data.map(state => {
+                    let glumDisplay;
+                    if (Math.abs(state.glum) >= 0.001) {
+                        glumDisplay = state.glum.toFixed(8);
+                    } else if (Math.abs(state.glum) >= 0.000001) {
+                        glumDisplay = state.glum.toFixed(10);
+                    } else if (state.glum === 0) {
+                        glumDisplay = "0";
+                    } else {
+                        glumDisplay = state.glum.toExponential(6);
+                    }
+                    
+                    return `${state.state},${state.wavelength.toFixed(1)},${state.DX.toFixed(5)},${state.DY.toFixed(5)},${state.DZ.toFixed(5)},${state.MX.toFixed(5)},${state.MY.toFixed(5)},${state.MZ.toFixed(5)},${state.absmiu_au.toFixed(5)},${state.absm_au.toFixed(5)},${state.absmiu.toFixed(6)},${state.absm.toFixed(6)},${state.theta.toFixed(2)},${glumDisplay}`;
+                }).join('\n');
+                
+                this.downloadFile(header + csv, 'orca_cpl_parameters.csv');
+            }
+            
+            downloadFile(content, filename) {
+                const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = filename;
+                link.click();
+            }
+            
+            showProgress() {
+                document.getElementById('progressContainer').classList.remove('hidden');
+            }
+            
+            hideProgress() {
+                document.getElementById('progressContainer').classList.add('hidden');
+            }
+        }
+        
+        // 初始化
+        const extractor = new ORCACPLExtractor();
+    </script>
+</body>
+</html>
