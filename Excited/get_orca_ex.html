@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORCA TDDFT 解析器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: #2563eb;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+
+        .upload-section {
+            padding: 30px;
+            text-align: center;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .upload-area {
+            border: 2px dashed #cbd5e1;
+            border-radius: 8px;
+            padding: 30px;
+            cursor: pointer;
+            background: #f8fafc;
+            transition: border-color 0.3s;
+        }
+
+        .upload-area:hover {
+            border-color: #2563eb;
+        }
+
+        .upload-area.dragover {
+            border-color: #2563eb;
+            background: #eff6ff;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .results-section {
+            padding: 20px;
+            display: none;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 6px;
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .tab-button {
+            padding: 8px 16px;
+            border: 1px solid #d1d5db;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .tab-button.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .export-btn {
+            padding: 8px 16px;
+            border: 1px solid #059669;
+            background: #10b981;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+        }
+
+        .export-btn:hover {
+            background: #059669;
+        }
+
+        .summary {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            text-align: center;
+        }
+
+        .summary-item span {
+            display: block;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #0369a1;
+        }
+
+        .summary-item small {
+            color: #64748b;
+            font-size: 0.85rem;
+        }
+
+        .data-container {
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        .data-table th {
+            background: #f1f5f9;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .data-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: top;
+        }
+
+        .data-table tbody tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        .data-table tbody tr:hover {
+            background: #e0f2fe;
+        }
+
+        .transitions-cell {
+            max-width: 300px;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .transition-item {
+            margin-bottom: 4px;
+            padding: 2px 6px;
+            background: #f1f5f9;
+            border-radius: 3px;
+            display: inline-block;
+            margin-right: 4px;
+        }
+
+        .weight-value {
+            font-weight: bold;
+            color: #059669;
+        }
+
+        .no-data {
+            text-align: center;
+            color: #6b7280;
+            padding: 40px;
+            font-style: italic;
+        }
+
+        .error {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #dc2626;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .controls {
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+            
+            .data-container {
+                font-size: 12px;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 8px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ORCA TDDFT 数据解析器</h1>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <div style="font-size: 2rem; margin-bottom: 10px;">📁</div>
+                <div style="font-size: 1.1rem; margin-bottom: 5px;">点击选择文件或拖拽到此处</div>
+                <div style="color: #6b7280; font-size: 0.9rem;">支持 .out, .log, .txt 格式</div>
+            </div>
+            <input type="file" id="fileInput" accept=".out,.log,.txt">
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="controls">
+                <div class="tab-buttons">
+                    <button class="tab-button active" onclick="switchTab('singlets')">
+                        单重态 <span id="singletsCount"></span>
+                    </button>
+                    <button class="tab-button" onclick="switchTab('triplets')">
+                        三重态 <span id="tripletsCount"></span>
+                    </button>
+                </div>
+                <div class="export-buttons">
+                    <button class="export-btn" onclick="exportToCSV()">导出CSV</button>
+                    <button class="export-btn" onclick="exportToExcel()">导出Excel</button>
+                </div>
+            </div>
+
+            <div id="singletsContent">
+                <div class="summary" id="singletsSummary"></div>
+                <div class="data-container">
+                    <table class="data-table" id="singletsTable">
+                        <thead>
+                            <tr>
+                                <th>STATE</th>
+                                <th>能量 (eV)</th>
+                                <th>波长 (nm)</th>
+                                <th>能量 (cm⁻¹)</th>
+                                <th>能量 (au)</th>
+                                <th>&lt;S²&gt;</th>
+                                <th>多重度</th>
+                                <th>主要跃迁</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tripletsContent" style="display: none;">
+                <div class="summary" id="tripletsSummary"></div>
+                <div class="data-container">
+                    <table class="data-table" id="tripletsTable">
+                        <thead>
+                            <tr>
+                                <th>STATE</th>
+                                <th>能量 (eV)</th>
+                                <th>波长 (nm)</th>
+                                <th>能量 (cm⁻¹)</th>
+                                <th>能量 (au)</th>
+                                <th>&lt;S²&gt;</th>
+                                <th>多重度</th>
+                                <th>主要跃迁</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'singlets';
+        let parsedData = null;
+
+        // 文件上传处理
+        document.getElementById('fileInput').addEventListener('change', handleFile);
+        
+        // 拖拽上传
+        const uploadArea = document.querySelector('.upload-area');
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                processFile(files[0]);
+            }
+        });
+
+        function handleFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                processFile(file);
+            }
+        }
+
+        function processFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                try {
+                    parsedData = parseORCAOutput(content);
+                    displayResults(parsedData);
+                } catch (error) {
+                    console.error('解析文件时出错:', error);
+                    showError('无法解析文件，请确保这是一个有效的ORCA TDDFT输出文件。');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function parseORCAOutput(content) {
+            const data = {
+                singlets: [],
+                triplets: []
+            };
+
+            // 解析单重态
+            const singletMatch = content.match(/TD-DFT EXCITED STATES \(SINGLETS\)\s*-+\s*([\s\S]*?)(?=\s*-+\s*TD-DFT EXCITED STATES \(TRIPLETS\)|\s*-{10,}|\s*$)/);
+            if (singletMatch) {
+                data.singlets = parseStates(singletMatch[1], 'singlet');
+            }
+
+            // 解析三重态
+            const tripletMatch = content.match(/TD-DFT EXCITED STATES \(TRIPLETS\)\s*-+\s*([\s\S]*?)(?=\s*-{10,}|\s*$)/);
+            if (tripletMatch) {
+                data.triplets = parseStates(tripletMatch[1], 'triplet');
+            }
+
+            return data;
+        }
+
+        function parseStates(sectionContent, type) {
+            const states = [];
+            
+            const stateRegex = /STATE\s+(\d+):\s+E=\s+([\d.-]+)\s+au\s+([\d.-]+)\s+eV\s+([\d.-]+)\s+cm\*\*-1\s+<S\*\*2>\s*=\s+([\d.-]+)\s+Mult\s+(\d+)\s*([\s\S]*?)(?=STATE\s+\d+:|$)/g;
+            
+            const stateMatches = [...sectionContent.matchAll(stateRegex)];
+
+            for (const match of stateMatches) {
+                const stateNumber = parseInt(match[1]);
+                const energyAU = parseFloat(match[2]);
+                const energyEV = parseFloat(match[3]);
+                const energyCM = parseFloat(match[4]);
+                const s2 = parseFloat(match[5]);
+                const mult = parseInt(match[6]);
+                const transitionsText = match[7];
+
+                const transitions = [];
+                const transitionRegex = /^\s*(\d+[ab])\s*->\s*(\d+[ab])\s*:\s*([\d.-]+)\s*$/gm;
+                const transitionMatches = [...transitionsText.matchAll(transitionRegex)];
+                
+                for (const tMatch of transitionMatches) {
+                    const weight = parseFloat(tMatch[3]);
+                    if (!isNaN(weight)) {
+                        transitions.push({
+                            from: tMatch[1],
+                            to: tMatch[2],
+                            weight: weight
+                        });
+                    }
+                }
+
+                if (!isNaN(energyEV) && energyEV > 0) {
+                    states.push({
+                        number: stateNumber,
+                        energyAU,
+                        energyEV,
+                        energyCM,
+                        wavelength: (1240 / energyEV).toFixed(1),
+                        s2,
+                        multiplicity: mult,
+                        transitions,
+                        type
+                    });
+                }
+            }
+
+            return states;
+        }
+
+        function displayResults(data) {
+            document.getElementById('resultsSection').style.display = 'block';
+            
+            document.getElementById('singletsCount').textContent = `(${data.singlets.length})`;
+            document.getElementById('tripletsCount').textContent = `(${data.triplets.length})`;
+            
+            displayStatesTable('singlets', data.singlets);
+            displayStatesTable('triplets', data.triplets);
+        }
+
+        function displayStatesTable(type, states) {
+            const summaryDiv = document.getElementById(`${type}Summary`);
+            const tableBody = document.querySelector(`#${type}Table tbody`);
+            
+            if (states.length === 0) {
+                summaryDiv.innerHTML = '<div class="no-data">未找到数据</div>';
+                tableBody.innerHTML = '<tr><td colspan="8" class="no-data">无数据</td></tr>';
+                return;
+            }
+
+            // 创建摘要
+            const minEnergy = Math.min(...states.map(s => s.energyEV)).toFixed(3);
+            const maxEnergy = Math.max(...states.map(s => s.energyEV)).toFixed(3);
+            const avgEnergy = (states.reduce((sum, s) => sum + s.energyEV, 0) / states.length).toFixed(3);
+            
+            summaryDiv.innerHTML = `
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <span>${states.length}</span>
+                        <small>总数</small>
+                    </div>
+                    <div class="summary-item">
+                        <span>${minEnergy}</span>
+                        <small>最低能量 (eV)</small>
+                    </div>
+                    <div class="summary-item">
+                        <span>${maxEnergy}</span>
+                        <small>最高能量 (eV)</small>
+                    </div>
+                    <div class="summary-item">
+                        <span>${avgEnergy}</span>
+                        <small>平均能量 (eV)</small>
+                    </div>
+                </div>
+            `;
+
+            // 填充表格
+            tableBody.innerHTML = states.map(state => {
+                const mainTransitions = state.transitions
+                    .sort((a, b) => b.weight - a.weight)
+                    .slice(0, 3)
+                    .map(t => `<div class="transition-item">${t.from}→${t.to} <span class="weight-value">${t.weight.toFixed(3)}</span></div>`)
+                    .join('');
+
+                return `
+                    <tr>
+                        <td><strong>${state.number}</strong></td>
+                        <td>${state.energyEV.toFixed(3)}</td>
+                        <td>${state.wavelength}</td>
+                        <td>${state.energyCM.toFixed(1)}</td>
+                        <td>${state.energyAU.toFixed(6)}</td>
+                        <td>${state.s2.toFixed(6)}</td>
+                        <td>${state.multiplicity}</td>
+                        <td class="transitions-cell">${mainTransitions || '无'}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            
+            document.getElementById('singletsContent').style.display = tab === 'singlets' ? 'block' : 'none';
+            document.getElementById('tripletsContent').style.display = tab === 'triplets' ? 'block' : 'none';
+        }
+
+        function exportToCSV() {
+            if (!parsedData) return;
+            
+            const data = parsedData[currentTab];
+            const typeName = currentTab === 'singlets' ? '单重态' : '三重态';
+            
+            let csv = 'STATE,能量(eV),波长(nm),能量(cm-1),能量(au),S2,多重度,主要跃迁\n';
+            
+            data.forEach(state => {
+                const mainTransitions = state.transitions
+                    .sort((a, b) => b.weight - a.weight)
+                    .slice(0, 3)
+                    .map(t => `${t.from}→${t.to}(${t.weight.toFixed(3)})`)
+                    .join('; ');
+                
+                csv += `${state.number},${state.energyEV.toFixed(3)},${state.wavelength},${state.energyCM.toFixed(1)},${state.energyAU.toFixed(6)},${state.s2.toFixed(6)},${state.multiplicity},"${mainTransitions}"\n`;
+            });
+            
+            downloadFile(csv, `ORCA_TDDFT_${typeName}.csv`, 'text/csv');
+        }
+
+        function exportToExcel() {
+            if (!parsedData) return;
+            
+            const data = parsedData[currentTab];
+            const typeName = currentTab === 'singlets' ? '单重态' : '三重态';
+            
+            // 简单的Excel格式 (实际是TSV)
+            let excel = 'STATE\t能量(eV)\t波长(nm)\t能量(cm-1)\t能量(au)\tS2\t多重度\t主要跃迁\n';
+            
+            data.forEach(state => {
+                const mainTransitions = state.transitions
+                    .sort((a, b) => b.weight - a.weight)
+                    .slice(0, 3)
+                    .map(t => `${t.from}→${t.to}(${t.weight.toFixed(3)})`)
+                    .join('; ');
+                
+                excel += `${state.number}\t${state.energyEV.toFixed(3)}\t${state.wavelength}\t${state.energyCM.toFixed(1)}\t${state.energyAU.toFixed(6)}\t${state.s2.toFixed(6)}\t${state.multiplicity}\t${mainTransitions}\n`;
+            });
+            
+            downloadFile(excel, `ORCA_TDDFT_${typeName}.xlsx`, 'application/vnd.ms-excel');
+        }
+
+        function downloadFile(content, filename, contentType) {
+            const blob = new Blob([content], { type: contentType });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        function showError(message) {
+            const resultsSection = document.getElementById('resultsSection');
+            resultsSection.style.display = 'block';
+            resultsSection.innerHTML = `<div class="error">${message}</div>`;
+        }
+    </script>
+</body>
+</html>
