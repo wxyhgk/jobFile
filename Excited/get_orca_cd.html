@@ -1,406 +1,641 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ORCA CPL参数提取器</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .file-drop-zone {
-            border: 2px dashed #cbd5e0;
-            transition: all 0.3s ease;
-        }
-        .file-drop-zone:hover,
-        .file-drop-zone.dragover {
-            border-color: #4299e1;
-            background-color: #ebf8ff;
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ORCA CPL 参数提取器 · 分规范计算 g + θ 回填</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .file-drop-zone{border:2px dashed #cbd5e0;transition:all .2s ease}
+    .file-drop-zone:hover,.file-drop-zone.dragover{border-color:#4299e1;background:#ebf8ff}
+    .mono{font-variant-numeric:tabular-nums}
+    .badge{border-radius:.5rem;padding:.1rem .4rem;font-size:.75rem}
+  </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-6xl">
-        <!-- 标题 -->
-        <div class="text-center mb-8">
-            <h1 class="text-2xl font-bold text-gray-800 mb-2">ORCA CPL参数提取器</h1>
-            <p class="text-gray-600">提取 absmiu、absm、theta、glum 参数</p>
-        </div>
-
-        <!-- 文件上传 -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
-            <div class="file-drop-zone rounded-lg p-6 text-center cursor-pointer" id="dropZone">
-                <p class="text-gray-600 mb-2">点击或拖拽上传ORCA输出文件</p>
-                <p class="text-sm text-gray-500">支持 .out, .log, .txt 格式</p>
-                <input type="file" id="fileInput" class="hidden" accept=".out,.log,.txt">
-            </div>
-            
-            <!-- 进度条 -->
-            <div id="progressContainer" class="hidden mt-4">
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    <div class="bg-blue-600 h-2 rounded-full" id="progressBar" style="width: 0%"></div>
-                </div>
-                <p class="text-sm text-gray-600 mt-2" id="progressText">处理中...</p>
-            </div>
-        </div>
-
-        <!-- 参数说明 -->
-        <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
-            <h3 class="font-semibold text-blue-800 mb-2">参数说明</h3>
-            <div class="text-blue-700 text-sm grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div><strong>absmiu:</strong> 电偶极矩绝对值 (×10⁻¹⁸ esu·cm)</div>
-                <div><strong>absm:</strong> 磁偶极矩绝对值 (×10⁻²⁰ erg·G⁻¹)</div>
-                <div><strong>theta:</strong> 电磁偶极矩夹角 (度)</div>
-                <div><strong>glum:</strong> 发光不对称因子 (无量纲)</div>
-            </div>
-        </div>
-
-        <!-- 结果表格 -->
-        <div id="results" class="hidden">
-            <div class="bg-white rounded-lg shadow-md p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-xl font-semibold text-gray-800">CPL参数提取结果</h3>
-                    <div class="space-x-2">
-                        <span class="text-sm text-gray-600">找到 <span id="stateCount" class="font-bold">0</span> 个状态</span>
-                        <button id="exportBtn" class="bg-green-500 hover:bg-green-600 text-white text-sm px-4 py-2 rounded">
-                            导出CSV
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm border-collapse">
-                        <thead>
-                            <tr class="bg-gray-100">
-                                <th class="border px-3 py-2 text-left">State</th>
-                                <th class="border px-3 py-2 text-left">λ (nm)</th>
-                                <th class="border px-3 py-2 text-left">DX (au)</th>
-                                <th class="border px-3 py-2 text-left">DY (au)</th>
-                                <th class="border px-3 py-2 text-left">DZ (au)</th>
-                                <th class="border px-3 py-2 text-left">MX (au)</th>
-                                <th class="border px-3 py-2 text-left">MY (au)</th>
-                                <th class="border px-3 py-2 text-left">MZ (au)</th>
-                                <th class="border px-3 py-2 text-left bg-yellow-50">|μ| (au)</th>
-                                <th class="border px-3 py-2 text-left bg-yellow-50">|m| (au)</th>
-                                <th class="border px-3 py-2 text-left bg-yellow-50">absmiu<br><span class="text-xs font-normal">(×10⁻¹⁸ esu·cm)</span></th>
-                                <th class="border px-3 py-2 text-left bg-yellow-50">absm<br><span class="text-xs font-normal">(×10⁻²⁰ erg·G⁻¹)</span></th>
-                                <th class="border px-3 py-2 text-left bg-yellow-50">theta<br><span class="text-xs font-normal"></span></th>
-                                <th class="border px-3 py-2 text-left bg-yellow-50">glum<br><span class="text-xs font-normal"></span></th>
-                            </tr>
-                        </thead>
-                        <tbody id="resultsTable">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- 状态提示 -->
-        <div id="status" class="text-center text-gray-600 py-8">
-            请上传ORCA输出文件开始分析
-        </div>
+  <div class="container mx-auto px-4 py-8 max-w-7xl">
+    <!-- 标题 -->
+    <div class="flex items-start justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-800">ORCA CPL 参数提取器</h1>
+        <p class="text-gray-600">absmiu、absm、theta、g 分规范计算 | SOC/非SOC | θ 由非SOC回填</p>
+      </div>
+      <div class="text-xs text-gray-500">前端纯本地解析 · 无上传</div>
     </div>
 
-    <script>
-        class ORCACPLExtractor {
-            constructor() {
-                this.data = [];
-                this.initializeEventListeners();
-            }
-            
-            initializeEventListeners() {
-                const dropZone = document.getElementById('dropZone');
-                const fileInput = document.getElementById('fileInput');
-                
-                dropZone.addEventListener('click', () => fileInput.click());
-                
-                dropZone.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    dropZone.classList.add('dragover');
-                });
-                
-                dropZone.addEventListener('dragleave', () => {
-                    dropZone.classList.remove('dragover');
-                });
-                
-                dropZone.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    dropZone.classList.remove('dragover');
-                    if (e.dataTransfer.files.length > 0) {
-                        this.handleFile(e.dataTransfer.files[0]);
-                    }
-                });
-                
-                fileInput.addEventListener('change', (e) => {
-                    if (e.target.files.length > 0) {
-                        this.handleFile(e.target.files[0]);
-                    }
-                });
-                
-                document.getElementById('exportBtn').addEventListener('click', () => this.exportCSV());
-            }
-            
-            async handleFile(file) {
-                this.showProgress();
-                document.getElementById('status').textContent = '正在处理文件...';
-                document.getElementById('results').classList.add('hidden');
-                
-                try {
-                    const content = await this.readFile(file);
-                    this.parseORCAOutput(content);
-                    this.displayResults();
-                    document.getElementById('status').textContent = '处理完成！';
-                } catch (error) {
-                    document.getElementById('status').textContent = '文件处理失败: ' + error.message;
-                }
-                
-                this.hideProgress();
-            }
-            
-            readFile(file) {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = e => resolve(e.target.result);
-                    reader.onerror = reject;
-                    reader.readAsText(file);
-                });
-            }
-            
-            parseORCAOutput(content) {
-                const lines = content.split('\n');
-                this.data = [];
-                
-                let inElectricDipoleSection = false;
-                let inMagneticDipoleSection = false;
-                
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i].trim();
-                    
-                    // 检测电偶极矩部分
-                    if (line.includes('ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS')) {
-                        inElectricDipoleSection = true;
-                        inMagneticDipoleSection = false;
-                        continue;
-                    }
-                    
-                    // 检测磁偶极矩部分
-                    if (line.includes('CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS')) {
-                        inMagneticDipoleSection = true;
-                        inElectricDipoleSection = false;
-                        continue;
-                    }
-                    
-                    // 跳过表头和分割线
-                    if (line.includes('State') || line.includes('---') || 
-                        line.includes('(eV)') || line.includes('(cm-1)') ||
-                        line.includes('(nm)') || line.includes('(au)') ||
-                        line.includes('Energy') || line.includes('Wavelength') ||
-                        line.includes('fosc') || line.includes('T2') ||
-                        line.includes('TX') || line.includes('TY') || line.includes('TZ') ||
-                        line.includes('MX') || line.includes('MY') || line.includes('MZ')) {
-                        continue;
-                    }
-                    
-                    // 提取电偶极矩数据
-                    if (inElectricDipoleSection && line.length > 0 && !line.includes('=')) {
-                        this.extractElectricDipoleData(line);
-                    }
-                    
-                    // 提取磁偶极矩数据
-                    if (inMagneticDipoleSection && line.length > 0 && !line.includes('=')) {
-                        this.extractMagneticDipoleData(line);
-                    }
-                    
-                    // 检测新段落开始
-                    if (line.includes('ABSORPTION SPECTRUM') || 
-                        line.includes('FLUORESCENCE') ||
-                        line.includes('NORMAL TERMINATION') || 
-                        line.includes('FINAL SINGLE POINT ENERGY')) {
-                        inElectricDipoleSection = false;
-                        inMagneticDipoleSection = false;
-                    }
-                }
-                
-                this.calculateCPLParameters();
-            }
-            
-            extractElectricDipoleData(line) {
-                const parts = line.split(/\s+/);
-                
-                if (line.includes('->') && parts.length >= 10) {
-                    const transitionMatch = line.match(/(\d+)-\w+\s*->\s*(\d+)-\w+/);
-                    if (transitionMatch) {
-                        const stateNum = parseInt(transitionMatch[2]);
-                        const wavelength = parseFloat(parts[5]) || 0;
-                        const DX = parseFloat(parts[8]) || 0;
-                        const DY = parseFloat(parts[9]) || 0;
-                        const DZ = parseFloat(parts[10]) || 0;
-                        
-                        if (stateNum > 0 && wavelength > 0) {
-                            this.updateStateData(stateNum, { wavelength, DX, DY, DZ });
-                        }
-                    }
-                }
-            }
-            
-            extractMagneticDipoleData(line) {
-                const parts = line.split(/\s+/);
-                
-                if (line.includes('->') && parts.length >= 9) {
-                    const transitionMatch = line.match(/(\d+)-\w+\s*->\s*(\d+)-\w+/);
-                    if (transitionMatch) {
-                        const stateNum = parseInt(transitionMatch[2]);
-                        const MX = parseFloat(parts[7]) || 0;
-                        const MY = parseFloat(parts[8]) || 0;
-                        const MZ = parseFloat(parts[9]) || 0;
-                        
-                        if (stateNum > 0) {
-                            this.updateStateData(stateNum, { MX, MY, MZ });
-                        }
-                    }
-                }
-            }
-            
-            updateStateData(stateNum, newData) {
-                let stateData = this.data.find(d => d.state === stateNum);
-                if (!stateData) {
-                    stateData = {
-                        state: stateNum,
-                        wavelength: 0,
-                        DX: 0, DY: 0, DZ: 0,
-                        MX: 0, MY: 0, MZ: 0
-                    };
-                    this.data.push(stateData);
-                }
-                Object.assign(stateData, newData);
-            }
-            
-            calculateCPLParameters() {
-                const AU_TO_ESU_CM = 2.541746473;
-                const AU_TO_ERG_PER_G = 1.854802;
-                
-                this.data.forEach(state => {
-                    // 计算电偶极矩绝对值
-                    const absmiu_au = Math.sqrt(state.DX*state.DX + state.DY*state.DY + state.DZ*state.DZ);
-                    
-                    // 计算磁偶极矩绝对值
-                    const absm_au = Math.sqrt(state.MX*state.MX + state.MY*state.MY + state.MZ*state.MZ);
-                    
-                    // 转换到CGS单位
-                    state.absmiu = absmiu_au * AU_TO_ESU_CM;
-                    state.absm = absm_au * AU_TO_ERG_PER_G * 1000;
-                    
-                    // 计算角度
-                    if (absmiu_au > 0 && absm_au > 0) {
-                        const dotProduct = state.DX*state.MX + state.DY*state.MY + state.DZ*state.MZ;
-                        const cosTheta = dotProduct / (absmiu_au * absm_au);
-                        const clampedCosTheta = Math.max(-1, Math.min(1, cosTheta));
-                        state.theta = Math.acos(clampedCosTheta) * 180 / Math.PI;
-                    } else {
-                        state.theta = 0;
-                    }
-                    
-                    // 计算glum（简化近似）
-                    if (absmiu_au > 0) {
-                        const dotProduct = state.DX*state.MX + state.DY*state.MY + state.DZ*state.MZ;
-                        const correctionFactor = 0.001;
-                        state.glum = 4 * dotProduct * correctionFactor / (absmiu_au * absmiu_au);
-                        
-                        if (Math.abs(state.glum) > 0.1) {
-                            state.glum = state.glum > 0 ? 0.1 : -0.1;
-                        }
-                    } else {
-                        state.glum = 0;
-                    }
-                    
-                    state.absmiu_au = absmiu_au;
-                    state.absm_au = absm_au;
-                });
-                
-                this.data = this.data
-                    .filter(state => state.absmiu_au > 0 || state.absm_au > 0)
-                    .sort((a, b) => a.state - b.state);
-            }
-            
-            displayResults() {
-                const tableBody = document.getElementById('resultsTable');
-                tableBody.innerHTML = '';
-                
-                this.data.forEach(state => {
-                    const row = document.createElement('tr');
-                    row.className = 'hover:bg-gray-50';
-                    
-                    let glumDisplay;
-                    if (Math.abs(state.glum) >= 0.001) {
-                        glumDisplay = state.glum.toFixed(6);
-                    } else if (Math.abs(state.glum) >= 0.000001) {
-                        glumDisplay = state.glum.toFixed(8);
-                    } else if (state.glum === 0) {
-                        glumDisplay = "0.000000";
-                    } else {
-                        glumDisplay = state.glum.toExponential(3);
-                    }
-                    
-                    row.innerHTML = `
-                        <td class="border px-3 py-2">${state.state}</td>
-                        <td class="border px-3 py-2">${state.wavelength.toFixed(1)}</td>
-                        <td class="border px-3 py-2">${state.DX.toFixed(5)}</td>
-                        <td class="border px-3 py-2">${state.DY.toFixed(5)}</td>
-                        <td class="border px-3 py-2">${state.DZ.toFixed(5)}</td>
-                        <td class="border px-3 py-2">${state.MX.toFixed(5)}</td>
-                        <td class="border px-3 py-2">${state.MY.toFixed(5)}</td>
-                        <td class="border px-3 py-2">${state.MZ.toFixed(5)}</td>
-                        <td class="border px-3 py-2 bg-yellow-50">${state.absmiu_au.toFixed(5)}</td>
-                        <td class="border px-3 py-2 bg-yellow-50">${state.absm_au.toFixed(5)}</td>
-                        <td class="border px-3 py-2 bg-yellow-50 font-medium">${state.absmiu.toFixed(3)}</td>
-                        <td class="border px-3 py-2 bg-yellow-50 font-medium">${state.absm.toFixed(3)}</td>
-                        <td class="border px-3 py-2 bg-yellow-50 font-medium">${state.theta.toFixed(2)}</td>
-                        <td class="border px-3 py-2 bg-yellow-50 font-medium">${glumDisplay}</td>
-                    `;
-                    tableBody.appendChild(row);
-                });
-                
-                document.getElementById('stateCount').textContent = this.data.length;
-                document.getElementById('results').classList.remove('hidden');
-            }
-            
-            exportCSV() {
-                const header = 'State,Wavelength(nm),DX(au),DY(au),DZ(au),MX(au),MY(au),MZ(au),|μ|(au),|m|(au),absmiu(×10⁻¹⁸ esu·cm),absm(×10⁻²⁰ erg·G⁻¹),theta(度),glum(无量纲)\n';
-                const csv = this.data.map(state => {
-                    let glumDisplay;
-                    if (Math.abs(state.glum) >= 0.001) {
-                        glumDisplay = state.glum.toFixed(8);
-                    } else if (Math.abs(state.glum) >= 0.000001) {
-                        glumDisplay = state.glum.toFixed(10);
-                    } else if (state.glum === 0) {
-                        glumDisplay = "0";
-                    } else {
-                        glumDisplay = state.glum.toExponential(6);
-                    }
-                    
-                    return `${state.state},${state.wavelength.toFixed(1)},${state.DX.toFixed(5)},${state.DY.toFixed(5)},${state.DZ.toFixed(5)},${state.MX.toFixed(5)},${state.MY.toFixed(5)},${state.MZ.toFixed(5)},${state.absmiu_au.toFixed(5)},${state.absm_au.toFixed(5)},${state.absmiu.toFixed(6)},${state.absm.toFixed(6)},${state.theta.toFixed(2)},${glumDisplay}`;
-                }).join('\n');
-                
-                this.downloadFile(header + csv, 'orca_cpl_parameters.csv');
-            }
-            
-            downloadFile(content, filename) {
-                const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = filename;
-                link.click();
-            }
-            
-            showProgress() {
-                document.getElementById('progressContainer').classList.remove('hidden');
-            }
-            
-            hideProgress() {
-                document.getElementById('progressContainer').classList.add('hidden');
-            }
+    <!-- 上传区 -->
+    <div class="bg-white rounded-lg shadow p-6 mb-4">
+      <div id="dropZone" class="file-drop-zone rounded-lg p-6 text-center cursor-pointer">
+        <div class="text-gray-700">点击或拖拽上传 ORCA 输出（.out / .log / .txt）</div>
+        <div class="text-gray-500 text-sm">解析 ABS/CD × length/velocity，SOC 与非 SOC；表以<strong>空行</strong>结束</div>
+        <input id="fileInput" type="file" class="hidden" accept=".out,.log,.txt"/>
+      </div>
+      <div id="progressContainer" class="hidden mt-4">
+        <div class="w-full bg-gray-200 rounded-full h-2"><div id="progressBar" class="bg-blue-600 h-2 rounded-full" style="width:0%"></div></div>
+        <p id="progressText" class="text-sm text-gray-600 mt-2">处理中…</p>
+      </div>
+      <div class="mt-3 text-right space-x-2">
+        <button id="loadSample" class="text-xs px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700">加载示例（非SOC最小）</button>
+        <button id="loadSocMock" class="text-xs px-3 py-1 rounded bg-slate-600 text-white hover:bg-slate-700">加载SOC模拟（400行）</button>
+        <button id="loadQuad" class="text-xs px-3 py-1 rounded bg-teal-600 text-white hover:bg-teal-700">加载四表联合示例</button>
+        <button id="loadSplit" class="text-xs px-3 py-1 rounded bg-rose-600 text-white hover:bg-rose-700">加载Split示例</button>
+      </div>
+    </div>
+
+    <!-- 控件条 -->
+    <div class="bg-white rounded-lg shadow p-4 mb-4 grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">数据视图</label>
+        <select id="variantSelect" class="w-full border rounded-md px-3 py-2 text-sm">
+          <option value="SOC_length">SOC_length</option>
+          <option value="SOC_velocity">SOC_velocity</option>
+          <option value="nonSOC_length">nonSOC_length</option>
+          <option value="nonSOC_velocity">nonSOC_velocity</option>
+          <option value="MASTER">MASTER（四表拼接）</option>
+          <option value="BEST">BEST（按优先级去重）</option>
+          <option value="TOP100_SOC_length">TOP100_SOC_length（按能量取前100）</option>
+          <option value="TOP100_SOC_velocity">TOP100_SOC_velocity（按能量取前100）</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">多重度分桶</label>
+        <select id="bucketSelect" class="w-full border rounded-md px-3 py-2 text-sm">
+          <option value="ALL">全部</option>
+          <option value="SINGLET">singlet_like（2S+1 &lt; 2.0）</option>
+          <option value="TRIPLET">triplet_like（≥ 2.0）</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">g 计算展示</label>
+        <select id="gModeSelect" class="w-full border rounded-md px-3 py-2 text-sm">
+          <option value="auto">随当前视图（仅一列 g）</option>
+          <option value="length_only">强制 length（仅一列 g_len）</option>
+          <option value="velocity_only">强制 velocity（仅一列 g_vel）</option>
+          <option value="split_cols">分列展示（g_len 与 g_vel 并列）</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">g 数值阈值</label>
+        <select id="gThreshold" class="w-full border rounded-md px-3 py-2 text-sm">
+          <option value="0">不过滤</option>
+          <option value="1e-12">过滤 D&lt;1e-12（不稳定）</option>
+          <option value="1e-10">过滤 D&lt;1e-10（更严格）</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">g 自动回退</label>
+        <label class="inline-flex items-center gap-2 text-sm"><input id="gAutoFallback" type="checkbox" class="rounded border-gray-300"> <span class="text-gray-600">length 失败用 velocity，或反之</span></label>
+      </div>
+      <div class="flex gap-2">
+        <div class="flex-1">
+          <label class="block text-sm text-gray-600 mb-1">搜索（lambda/from/to/能量）</label>
+          <input id="searchBox" class="w-full border rounded-md px-3 py-2 text-sm" placeholder="支持正则，如 0-1.*->\s*\d-3"/>
+        </div>
+        <button id="exportBtn" class="self-end bg-emerald-600 hover:bg-emerald-700 text-white text-sm px-4 py-2 rounded-md">导出 CSV</button>
+      </div>
+    </div>
+
+    <!-- 提示 -->
+    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4 text-sm text-blue-800">
+      <div class="font-semibold mb-1">单位与公式</div>
+      <ul class="list-disc ml-5">
+        <li>absmiu = |μ(au)| × 2.541746（×10⁻¹⁸ esu·cm）</li>
+        <li>absm   = |m(au)| × 0.927401（×10⁻²⁰ erg·G⁻¹）</li>
+        <li>glum ≡ g = 4R/D，R 用 <span class="mono">R (1e40 cgs)</span> × 1e-40，D = D2 或 P2（对应 length/velocity）× (2.541746e-18)²</li>
+        <li>theta 仅能从非 SOC 表的带符号分量计算，并回填到匹配的 SOC 条目</li>
+      </ul>
+    </div>
+
+    <!-- 结果 -->
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex justify-between items-center mb-3">
+        <div>
+          <span class="text-gray-600 text-sm">当前视图：</span>
+          <span id="viewTag" class="badge bg-gray-100 text-gray-700">—</span>
+        </div>
+        <div class="text-sm text-gray-600">
+          共 <span id="rowCount" class="font-semibold">0</span> 条
+          <span id="explainTag" class="ml-2 text-gray-500"></span>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border-collapse">
+          <thead id="thead">
+          <tr class="bg-gray-100">
+            <th class="border px-2 py-2 text-left">λ (nm)</th>
+            <th class="border px-2 py-2 text-left">DX (au)</th>
+            <th class="border px-2 py-2 text-left">DY (au)</th>
+            <th class="border px-2 py-2 text-left">DZ (au)</th>
+            <th class="border px-2 py-2 text-left">MX (au)</th>
+            <th class="border px-2 py-2 text-left">MY (au)</th>
+            <th class="border px-2 py-2 text-left">MZ (au)</th>
+            <th class="border px-2 py-2 text-left bg-yellow-50">|μ| (au)</th>
+            <th class="border px-2 py-2 text-left bg-yellow-50">|m| (au)</th>
+            <th class="border px-2 py-2 text-left bg-yellow-50">absmiu<br><span class="text-xs font-normal">(×10⁻¹⁸ esu·cm)</span></th>
+            <th class="border px-2 py-2 text-left bg-yellow-50">absm<br><span class="text-xs font-normal">(×10⁻²⁰ erg·G⁻¹)</span></th>
+            <th class="border px-2 py-2 text-left bg-yellow-50">theta</th>
+            <th class="border px-2 py-2 text-left bg-yellow-50">glum</th>
+          </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="status" class="text-center text-gray-500 py-6">请上传 ORCA 输出文件开始分析，或用上方按钮加载示例</div>
+  </div>
+
+<script>
+// ===== constants =====
+const AU_TO_DEBYE = 2.541746;
+const AU_ELEC_TO_ESU_CM = 2.541746e-18;
+const AU_MAG_TO_ERG_PER_G = 9.274009994e-21;
+
+const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+const fmt = (x, k=3) => Number.isFinite(x)? x.toFixed(k) : '';
+
+// label helpers
+function normalizeLabel(lbl){ return lbl.replace(/-(\d+(?:\.\d+)?)A/g, (_,x)=>`-${Math.round(parseFloat(x))}A`); }
+function multValue(lbl){ const m = /-(\d+(?:\.\d+)?)A/.exec(lbl); return m? parseFloat(m[1]) : null; }
+function multBucket(lbl){ const v = multValue(lbl); if(v==null) return 'unknown'; return v < 2.0 ? 'singlet_like' : 'triplet_like'; }
+
+// parse helpers
+const ROW_ABS = /\s*(\S+)\s*->\s*(\S+)\s+([-0-9.]+)\s+([-0-9.]+)\s+([-0-9.]+)\s+([-0-9Ee+.]+)\s+([-0-9Ee+.]+)\s+([-0-9Ee+.]+)\s+([-0-9Ee+.]+)\s+([-0-9Ee+.]+)\s*/;
+const ROW_CD  = /\s*(\S+)\s*->\s*(\S+)\s+([-0-9.]+)\s+([-0-9.]+)\s+([-0-9.]+)\s+([-0-9Ee+.]+)\s+([-0-9Ee+.]+)\s+([-0-9Ee+.]+)\s+([-0-9Ee+.]+)\s*/;
+
+function parseTableByBlank(lines, headerSubstr, isAbs){
+  const rowRe = isAbs? ROW_ABS : ROW_CD;
+  const out = [];
+  for(let i=0;i<lines.length;i++){
+    if(lines[i].includes(headerSubstr)){
+      let started=false;
+      for(let j=i+1;j<lines.length;j++){
+        const line = lines[j];
+        const m = rowRe.exec(line);
+        if(m){ started=true; out.push(m.slice(1)); continue; }
+        if(started && line.trim()==='') break; // blank line ends
+        if(started && line.trim()!=='') break; // defensive
+      }
+    }
+  }
+  return out;
+}
+
+function parseAllVariants(text){
+  const lines = text.split(/
+?
+/);
+  const variants = [
+    {soc:false,gauge:'length',  hdrA:'ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS',
+                                 hdrC:'CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS'},
+    {soc:false,gauge:'velocity',hdrA:'ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS',
+                                 hdrC:'CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS'},
+    {soc:true, gauge:'length',  hdrA:'SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS',
+                                 hdrC:'SOC CORRECTED CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS'},
+    {soc:true, gauge:'velocity',hdrA:'SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS',
+                                 hdrC:'SOC CORRECTED CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS'},
+  ];
+  const sheets = {};
+  const TINY=1e-14; const EV_PER_HARTREE=27.211386245988;
+  for(const v of variants){
+    const A = parseTableByBlank(lines, v.hdrA, true);
+    const C = parseTableByBlank(lines, v.hdrC, false);
+    if(!A.length || !C.length) continue;
+
+    const aRows = A.map(r=>({ from:r[0], to:r[1], eV:+r[2], cm:+r[3], nm:+r[4], fosc:+r[5], D2:+r[6], DX:+r[7], DY:+r[8], DZ:+r[9] }));
+    const cRows = C.map(r=>({ from:r[0], to:r[1], eV:+r[2], cm:+r[3], nm:+r[4], R:+r[5], MX:+r[6], MY:+r[7], MZ:+r[8] }));
+
+    const cExact = new Map(cRows.map(x=>[`${x.from}|${x.to}`, x]));
+    const cNorm = new Map();
+    for(const x of cRows){
+      const k = `${normalizeLabel(x.from)}|${normalizeLabel(x.to)}`;
+      const arr = cNorm.get(k) || [];
+      arr.push(x);
+      cNorm.set(k, arr);
+    }
+
+    const joined = [];
+    for(const a of aRows){
+      const key = `${a.from}|${a.to}`;
+      let c = cExact.get(key);
+      if(!c){
+        const kn = `${normalizeLabel(a.from)}|${normalizeLabel(a.to)}`;
+        const list = cNorm.get(kn) || [];
+        if(list.length===1) c = list[0];
+        else if(list.length>1){
+          c = list.reduce((best,cur)=>{
+            const da = Math.abs((a.eV||0)-(cur.eV||0)) + 0.01*Math.abs((a.nm||0)-(cur.nm||0));
+            const db = Math.abs((a.eV||0)-(best.eV||0)) + 0.01*Math.abs((a.nm||0)-(best.nm||0));
+            return da < db ? cur : best;
+          }, list[0]);
         }
-        
-        // 初始化
-        const extractor = new ORCACPLExtractor();
-    </script>
+      }
+      if(!c) continue;
+
+      // magnitudes for display
+      const mu = Math.hypot(a.DX, Math.hypot(a.DY, a.DZ));
+      const mm = Math.hypot(c.MX, Math.hypot(c.MY, c.MZ));
+      const absmiu = mu * AU_TO_DEBYE;
+      const absm   = (mm * AU_MAG_TO_ERG_PER_G) / 1e-20;
+
+      // g denominator: 优先使用与规范一致的数据；必要时用 fosc 和能量回推到 length 规范的 D2_len
+      const dE_au = (a.eV||0)/EV_PER_HARTREE;
+      let D2_len_au2;
+      let D_from='native';
+      if(v.gauge==='length'){
+        D2_len_au2 = a.D2; // already D2
+      }else{
+        // velocity: a.D2 实际是 P2，换算到 length 等效：D2 = P2 / (ΔE_au)^2
+        D2_len_au2 = (dE_au>TINY)? a.D2 / (dE_au*dE_au) : NaN;
+      }
+      if(!(D2_len_au2> TINY)){
+        // fallback: 用 fosc 反推 length 规范 D2 = (3/2) f / ΔE_au
+        if((a.fosc||0)>TINY && dE_au>TINY){ D2_len_au2 = 1.5 * a.fosc / dE_au; D_from='fosc_fallback'; }
+      }
+
+      const R_cgs = c.R * 1e-40;
+      const D_cgs = (D2_len_au2>0? D2_len_au2 : NaN) * (AU_ELEC_TO_ESU_CM ** 2);
+      const g = 4 * R_cgs / (D_cgs || NaN);
+
+      joined.push({ from:a.from, to:a.to, soc:v.soc, gauge:v.gauge,
+        energy_eV:a.eV, wavelength_nm:a.nm,
+        DX_au:a.DX, DY_au:a.DY, DZ_au:a.DZ, MX_au:c.MX, MY_au:c.MY, MZ_au:c.MZ,
+        mu_abs_au:mu, m_abs_au:mm, absmiu_x1e18_esu_cm:absmiu, absm_x1e20_erg_G:absm,
+        D2_au2:a.D2, R_1e40_cgs:c.R, mult_bucket: multBucket(a.to), theta_deg: NaN, g,
+        D_from:D_from, dE_au:dE_au, fosc:a.fosc, D2_len_eff_au2:D2_len_au2
+      });
+    }
+    sheets[(v.soc? 'SOC':'nonSOC')+'_'+v.gauge] = joined;
+  }
+  return sheets;
+}
+
+// theta from nonSOC signed components and backfill to SOC
+function backfillTheta(sheets){
+  const sources = [];
+  for(const key of ['nonSOC_length','nonSOC_velocity']){
+    for(const r of (sheets[key]||[])){
+      const mu=r.mu_abs_au, mm=r.m_abs_au, dot=r.DX_au*r.MX_au + r.DY_au*r.MY_au + r.DZ_au*r.MZ_au;
+      const cosT = clamp(dot/((mu||1e-30)*(mm||1e-30)),-1,1);
+      r.theta_deg = Math.acos(cosT)*180/Math.PI;
+      sources.push({k:`${normalizeLabel(r.from)}|${normalizeLabel(r.to)}`,theta:r.theta_deg});
+    }
+  }
+  const map = new Map(sources.map(x=>[x.k,x.theta]));
+  for(const key of Object.keys(sheets)){
+    for(const r of sheets[key]){
+      if(Number.isFinite(r.theta_deg)) continue;
+      const k = `${normalizeLabel(r.from)}|${normalizeLabel(r.to)}`;
+      if(map.has(k)) r.theta_deg = map.get(k);
+    }
+  }
+  return sheets;
+}
+
+function buildBest(sheets, order){
+  const priority = order.split(',');
+  const seen = new Set(); const out=[];
+  for(const key of priority){
+    for(const r of (sheets[key]||[])){
+      const k=`${normalizeLabel(r.from)}|${normalizeLabel(r.to)}`; if(seen.has(k)) continue; seen.add(k); out.push(r);
+    }
+  }
+  return out;
+}
+
+function buildSplitRows(sheets, socFlag, dMin){
+  const base = sheets[(socFlag?'SOC':'nonSOC')+'_length']||[];
+  const mate = sheets[(socFlag?'SOC':'nonSOC')+'_velocity']||[];
+  const map = new Map(mate.map(r=>[`${normalizeLabel(r.from)}|${normalizeLabel(r.to)}`, r]));
+  const out=[];
+  for(const a of base){
+    const b = map.get(`${normalizeLabel(a.from)}|${normalizeLabel(a.to)}`);
+    let g_len = (!a.D2_len_eff_au2 || a.D2_len_eff_au2<dMin)? NaN : a.g;
+    let g_vel = (!b || !b.D2_len_eff_au2 || b.D2_len_eff_au2<dMin)? NaN : b.g;
+    const reason_len = (!a.D2_len_eff_au2? 'D=0' : (a.D2_len_eff_au2<dMin? 'D<阈值' : (!Number.isFinite(a.g)? '缺R/除零':''))) + (a.D_from==='fosc_fallback'?' | D←fosc回推':'');
+    const reason_vel = (!b? '无 velocity 行' : (!b.D2_len_eff_au2? 'D=0' : (b.D2_len_eff_au2<dMin? 'D<阈值' : (!Number.isFinite(b.g)? '缺R/除零':'')))) + (b && b.D_from==='fosc_fallback'?' | D←fosc回推':'');
+    out.push({
+      wavelength_nm:a.wavelength_nm, DX_au:a.DX_au, DY_au:a.DY_au, DZ_au:a.DZ_au,
+      MX_au:a.MX_au, MY_au:a.MY_au, MZ_au:a.MZ_au,
+      mu_abs_au:a.mu_abs_au, m_abs_au:a.m_abs_au,
+      absmiu_x1e18_esu_cm:a.absmiu_x1e18_esu_cm, absm_x1e20_erg_G:a.absm_x1e20_erg_G,
+      theta_deg:a.theta_deg, g_len:g_len, g_vel:g_vel,
+      g_len_reason:reason_len, g_vel_reason:reason_vel
+    });
+  }
+  return out;
+}
+
+// render
+let SHEETS = {}; let MASTER=[]; let BEST=[];
+
+function render(){
+  const variant = document.getElementById('variantSelect').value;
+  const bucket  = document.getElementById('bucketSelect').value;
+  const gMode   = document.getElementById('gModeSelect').value;
+  const dMin    = parseFloat(document.getElementById('gThreshold').value);
+  const autoFB  = !!document.getElementById('gAutoFallback').checked;
+  const q       = document.getElementById('searchBox').value.trim();
+  const order   = document.getElementById('dedupOrder')? document.getElementById('dedupOrder').value : 'SOC_length,SOC_velocity,nonSOC_length,nonSOC_velocity';
+
+  if(variant==='BEST'){ BEST = buildBest(SHEETS, order); }
+
+  let data = [];
+  if(gMode==='split_cols'){
+    const socFlag = /SOC/.test(variant);
+    data = buildSplitRows(SHEETS, socFlag, isNaN(dMin)?0:dMin);
+  }else{
+    if(variant==='MASTER') data = MASTER;
+    else if(variant==='BEST') data = BEST;
+    else if(variant==='TOP100_SOC_length'){ const base=SHEETS['SOC_length']||[]; data=[...base].sort((a,b)=>a.energy_eV-b.energy_eV).slice(0,100); }
+    else if(variant==='TOP100_SOC_velocity'){ const base=SHEETS['SOC_velocity']||[]; data=[...base].sort((a,b)=>a.energy_eV-b.energy_eV).slice(0,100); }
+    else data = SHEETS[variant]||[];
+
+    // alt map for auto fallback within same SOC flag
+    let altMap=null, altLabel='';
+    if(autoFB && /(length|velocity)/.test(variant)){
+      const altKey = /length/.test(variant) ? variant.replace('length','velocity') : variant.replace('velocity','length');
+      const alt = SHEETS[altKey]||[];
+      altMap = new Map(alt.map(r=>[`${normalizeLabel(r.from)}|${normalizeLabel(r.to)}`, r]));
+      altLabel = /length/.test(variant)? 'velocity' : 'length';
+    }
+
+    data = data.map(r=>{
+      let g = (!r.D2_au2 || r.D2_au2<(isNaN(dMin)?0:dMin))? NaN : r.g;
+      let reason = (!r.D2_au2? 'D=0' : (r.D2_au2<(isNaN(dMin)?0:dMin)? 'D<阈值' : (!Number.isFinite(r.g)? '缺R/除零':'')));
+      if(!Number.isFinite(g) && altMap){
+        const k = `${normalizeLabel(r.from)}|${normalizeLabel(r.to)}`;
+        const b = altMap.get(k);
+        if(b && b.D2_au2 && b.D2_au2>=(isNaN(dMin)?0:dMin) && Number.isFinite(b.g)){
+          g = b.g; reason = `auto: 用 ${altLabel}`;
+        }
+      }
+      return {
+        wavelength_nm:r.wavelength_nm, DX_au:r.DX_au, DY_au:r.DY_au, DZ_au:r.DZ_au,
+        MX_au:r.MX_au, MY_au:r.MY_au, MZ_au:r.MZ_au,
+        mu_abs_au:r.mu_abs_au, m_abs_au:r.m_abs_au,
+        absmiu_x1e18_esu_cm:r.absmiu_x1e18_esu_cm, absm_x1e20_erg_G:r.absm_x1e20_erg_G,
+        theta_deg:r.theta_deg, g:g, mult_bucket:r.mult_bucket,
+        glum_reason: (reason + (r.D_from==='fosc_fallback'?' | D←fosc回推':'')), from:r.from, to:r.to
+      };
+    });
+  }
+
+  if(bucket!=='ALL'){
+    const want = bucket==='SINGLET' ? 'singlet_like' : 'triplet_like';
+    data = data.filter(r => (r.mult_bucket||'')===want || typeof r.mult_bucket==='undefined');
+  }
+
+  if(q){ let re; try{ re=new RegExp(q,'i'); }catch{ re=null; }
+    if(re) data = data.filter(r=> re.test(String(r.wavelength_nm)) || re.test(String(r.DX_au)) || re.test(String(r.from)) || re.test(String(r.to)) );
+  }
+
+  const thead = document.getElementById('thead');
+  if(gMode==='split_cols'){
+    thead.innerHTML = `<tr class="bg-gray-100">
+      <th class="border px-2 py-2 text-left">λ (nm)</th>
+      <th class="border px-2 py-2 text-left">DX (au)</th>
+      <th class="border px-2 py-2 text-left">DY (au)</th>
+      <th class="border px-2 py-2 text-left">DZ (au)</th>
+      <th class="border px-2 py-2 text-left">MX (au)</th>
+      <th class="border px-2 py-2 text-left">MY (au)</th>
+      <th class="border px-2 py-2 text-left">MZ (au)</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">|μ| (au)</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">|m| (au)</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">absmiu<br><span class="text-xs">(×10⁻¹⁸ esu·cm)</span></th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">absm<br><span class="text-xs">(×10⁻²⁰ erg·G⁻¹)</span></th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">theta</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">g_len</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">g_vel</th>
+    </tr>`;
+  }else{
+    thead.innerHTML = `<tr class="bg-gray-100">
+      <th class="border px-2 py-2 text-left">λ (nm)</th>
+      <th class="border px-2 py-2 text-left">DX (au)</th>
+      <th class="border px-2 py-2 text-left">DY (au)</th>
+      <th class="border px-2 py-2 text-left">DZ (au)</th>
+      <th class="border px-2 py-2 text-left">MX (au)</th>
+      <th class="border px-2 py-2 text-left">MY (au)</th>
+      <th class="border px-2 py-2 text-left">MZ (au)</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">|μ| (au)</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">|m| (au)</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">absmiu<br><span class="text-xs">(×10⁻¹⁸ esu·cm)</span></th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">absm<br><span class="text-xs">(×10⁻²⁰ erg·G⁻¹)</span></th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">theta</th>
+      <th class="border px-2 py-2 text-left bg-yellow-50">glum</th>
+    </tr>`;
+  }
+
+  document.getElementById('viewTag').textContent = variant + (gMode==='split_cols'?' · split':'');
+  document.getElementById('rowCount').textContent = data.length;
+  const explain = document.getElementById('explainTag');
+  explain.textContent = (gMode==='split_cols')? '同一 SOC/非SOC 下 length 与 velocity 各算一列 g；D 阈值过滤仅影响 g 的显示' : (autoFB? '已启用 g 自动回退（length 与 velocity 之间就近替补）' : '');
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = '';
+  for(const r of data){
+    const tr = document.createElement('tr'); tr.className='hover:bg-gray-50';
+    if(gMode==='split_cols'){
+      tr.innerHTML = `
+        <td class="border px-2 py-1 text-right">${fmt(r.wavelength_nm,1)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.DX_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.DY_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.DZ_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.MX_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.MY_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.MZ_au,5)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${fmt(r.mu_abs_au,5)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${fmt(r.m_abs_au,5)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${fmt(r.absmiu_x1e18_esu_cm,3)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${fmt(r.absm_x1e20_erg_G,3)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${Number.isFinite(r.theta_deg)? fmt(r.theta_deg,2): ''}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50" title="${r.g_len_reason||''}">${Number.isFinite(r.g_len)? fmt(r.g_len,6): ''}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50" title="${r.g_vel_reason||''}">${Number.isFinite(r.g_vel)? fmt(r.g_vel,6): ''}</td>`;
+    }else{
+      tr.innerHTML = `
+        <td class="border px-2 py-1 text-right">${fmt(r.wavelength_nm,1)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.DX_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.DY_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.DZ_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.MX_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.MY_au,5)}</td>
+        <td class="border px-2 py-1 text-right">${fmt(r.MZ_au,5)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${fmt(r.mu_abs_au,5)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${fmt(r.m_abs_au,5)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${fmt(r.absmiu_x1e18_esu_cm,3)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${fmt(r.absm_x1e20_erg_G,3)}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50">${Number.isFinite(r.theta_deg)? fmt(r.theta_deg,2): ''}</td>
+        <td class="border px-2 py-1 text-right bg-yellow-50" title="${r.glum_reason||''}">${Number.isFinite(r.g)? fmt(r.g,6): ''}</td>`;
+    }
+    tbody.appendChild(tr);
+  }
+}
+
+function exportCSV(){
+  const variant = document.getElementById('variantSelect').value;
+  const gMode   = document.getElementById('gModeSelect').value;
+  const bucket  = document.getElementById('bucketSelect').value;
+  const dMin    = parseFloat(document.getElementById('gThreshold').value);
+
+  let data = [];
+  if(gMode==='split_cols'){
+    const socFlag = /SOC/.test(variant);
+    data = buildSplitRows(SHEETS, socFlag, isNaN(dMin)?0:dMin);
+  }else{
+    data = variant==='MASTER' ? MASTER : variant==='BEST' ? BEST : (SHEETS[variant]||[]);
+    data = data.map(r=>({
+      wavelength_nm:r.wavelength_nm, DX_au:r.DX_au, DY_au:r.DY_au, DZ_au:r.DZ_au,
+      MX_au:r.MX_au, MY_au:r.MY_au, MZ_au:r.MZ_au,
+      mu_abs_au:r.mu_abs_au, m_abs_au:r.m_abs_au,
+      absmiu_x1e18_esu_cm:r.absmiu_x1e18_esu_cm, absm_x1e20_erg_G:r.absm_x1e20_erg_G,
+      theta_deg:r.theta_deg, g:(!r.D2_au2 || r.D2_au2<(isNaN(dMin)?0:dMin))? NaN : r.g, mult_bucket:r.mult_bucket
+    }));
+  }
+
+  if(bucket!=='ALL'){
+    const want = bucket==='SINGLET' ? 'singlet_like' : 'triplet_like';
+    data = data.filter(r => (r.mult_bucket||'')===want || typeof r.mult_bucket==='undefined');
+  }
+
+  let header, rows;
+  if(gMode==='split_cols'){
+    header = ['lambda_nm','DX_au','DY_au','DZ_au','MX_au','MY_au','MZ_au','mu_abs_au','m_abs_au','absmiu(x1e-18 esu·cm)','absm(x1e-20 erg·G^-1)','theta_deg','g_len','g_vel'];
+    rows = data.map(r=>[r.wavelength_nm,r.DX_au,r.DY_au,r.DZ_au,r.MX_au,r.MY_au,r.MZ_au,r.mu_abs_au,r.m_abs_au,r.absmiu_x1e18_esu_cm,r.absm_x1e20_erg_G,(Number.isFinite(r.theta_deg)?r.theta_deg:''),(Number.isFinite(r.g_len)?r.g_len:''),(Number.isFinite(r.g_vel)?r.g_vel:'')]);
+  }else{
+    header = ['lambda_nm','DX_au','DY_au','DZ_au','MX_au','MY_au','MZ_au','mu_abs_au','m_abs_au','absmiu(x1e-18 esu·cm)','absm(x1e-20 erg·G^-1)','theta_deg','glum'];
+    rows = data.map(r=>[r.wavelength_nm,r.DX_au,r.DY_au,r.DZ_au,r.MX_au,r.MY_au,r.MZ_au,r.mu_abs_au,r.m_abs_au,r.absmiu_x1e18_esu_cm,r.absm_x1e20_erg_G,(Number.isFinite(r.theta_deg)?r.theta_deg:''),(Number.isFinite(r.g)?r.g:'')]);
+  }
+  const csv = [header.join(','), ...rows.map(r=>r.join(','))].join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `cpl_${variant}_${gMode}.csv`; a.click();
+}
+
+// progress
+function setProgress(p,msg){ document.getElementById('progressContainer').classList.remove('hidden'); document.getElementById('progressBar').style.width = `${Math.floor(p)}%`; document.getElementById('progressText').textContent = msg||'处理中…'; }
+function hideProgress(){ document.getElementById('progressContainer').classList.add('hidden'); }
+
+// IO
+async function readText(file){ return await new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=e=>resolve(e.target.result); r.onerror=reject; r.readAsText(file); }); }
+async function handleFile(file){
+  setProgress(10,'读取文件…'); document.getElementById('status').textContent = '正在解析…';
+  try{
+    const text = await readText(file);
+    setProgress(35,'解析四张表…');
+    const sheets = parseAllVariants(text);
+    setProgress(55,'θ 由非SOC回填…');
+    SHEETS = backfillTheta(sheets);
+    setProgress(75,'构建拼接与去重视图…');
+    MASTER = Object.values(SHEETS).flat();
+    BEST = buildBest(SHEETS, 'SOC_length,SOC_velocity,nonSOC_length,nonSOC_velocity');
+    setProgress(95,'渲染…');
+    render();
+    document.getElementById('status').textContent = '完成';
+  }catch(err){ console.error(err); document.getElementById('status').textContent = '解析失败：' + err.message; }
+  finally{ hideProgress(); }
+}
+
+// 自测：最小非SOC
+function runSelfTest(){
+  const t = `--------------------------------\nABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS\n--------------------------------\n  Transition         Energy     Energy  Wavelength    fosc      D2        DX        DY        DZ\n                      (eV)      (cm-1)    (nm)                 (au^2)     (au)      (au)      (au)\n--------------------------------\n  0-1.0A  ->  1-3.0A    2.000000   16129.0   620.0   0.01000   0.05000   0.01000   0.02000   0.03000\n\n--------------------------------\nCD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS\n--------------------------------\n  Transition         Energy     Energy  Wavelength    R       |MX|      |MY|      |MZ|\n                      (eV)      (cm-1)    (nm)    (1e40*cgs)  (au)      (au)      (au)\n--------------------------------\n  0-1.0A  ->  1-3.0A    2.000000   16129.0   620.0   -0.05165   0.00000   0.00000   0.00498\n\n`;
+  const sheets = parseAllVariants(t); SHEETS = backfillTheta(sheets); MASTER = Object.values(SHEETS).flat(); BEST = buildBest(SHEETS, 'SOC_length,SOC_velocity,nonSOC_length,nonSOC_velocity'); render(); document.getElementById('status').textContent='已加载示例数据（1 行）';
+}
+
+// 自测：SOC 400 行
+function runSocMockTest(){
+  const lines = [];
+  lines.push('SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS');
+  lines.push('');
+  for(let i=1;i<=400;i++){
+    const eV=1.5+i*0.01, nm=(1240/eV).toFixed(1), f=(0.001+(i%10)/1000).toFixed(5), D2=(0.02+(i%5)*0.001).toFixed(5);
+    const DX=(0.01*(i%3)).toFixed(5), DY=(0.02*((i+1)%3)).toFixed(5), DZ=(0.03*((i+2)%3)).toFixed(5);
+    lines.push(`  0-1.0A  ->  ${i}-${i<=100?'1.0':'3.0'}A    ${eV.toFixed(6)}   15750.4   ${nm}   ${f}   ${D2}   ${DX}   ${DY}   ${DZ}`);
+  }
+  lines.push('');
+  lines.push('SOC CORRECTED CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS');
+  lines.push('');
+  for(let i=1;i<=400;i++){
+    const eV=1.5+i*0.01, nm=(1240/eV).toFixed(1), R=((i%2?-1:1)*(0.001+(i%9)/1000)).toFixed(5);
+    const MX=(0.01*((i+1)%3)).toFixed(5), MY=(0.02*((i+2)%3)).toFixed(5), MZ=(0.03*(i%3)).toFixed(5);
+    lines.push(`  0-1.0A  ->  ${i}-${i<=100?'1.0':'3.0'}A    ${eV.toFixed(6)}   15750.4   ${nm}   ${R}   ${MX}   ${MY}   ${MZ}`);
+  }
+  const sample = lines.join('\n'); const sheets = parseAllVariants(sample); SHEETS = backfillTheta(sheets); MASTER = Object.values(SHEETS).flat(); BEST = buildBest(SHEETS, 'SOC_length,SOC_velocity,nonSOC_length,nonSOC_velocity'); document.getElementById('variantSelect').value='SOC_length'; render(); document.getElementById('status').textContent='已加载 SOC 模拟数据（400 行），可切换到 TOP100 或 split 模式';
+}
+
+// 自测：四表联合
+function runQuadTest(){
+  const p=[];
+  p.push('ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS');
+  p.push('  0-1.0A  ->  1-3.0A    2.10   16935.0   590.5   0.01000   0.05000   0.01000   0.02000   0.03000');
+  p.push('');
+  p.push('CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS');
+  p.push('  0-1.0A  ->  1-3.0A    2.10   16935.0   590.5   -0.01000   0.00100   0.00200   0.00300');
+  p.push('');
+  p.push('ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS');
+  p.push('  0-1.0A  ->  2-3.0A    2.20   17742.0   563.6   0.02000   0.06000   0.01500   0.02500   0.03500');
+  p.push('');
+  p.push('CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS');
+  p.push('  0-1.0A  ->  2-3.0A    2.20   17742.0   563.6   0.01234   0.00400   0.00500   0.00600');
+  p.push('');
+  p.push('SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS');
+  p.push('  0-1.0A  ->  3-3.0A    2.30   18565.0   539.1   0.03000   0.07000   0.01100   0.02100   0.03100');
+  p.push('');
+  p.push('SOC CORRECTED CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS');
+  p.push('  0-1.0A  ->  3-3.0A    2.30   18565.0   539.1   -0.02345   0.00110   0.00210   0.00310');
+  p.push('');
+  p.push('SOC CORRECTED ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS');
+  p.push('  0-1.0A  ->  4-3.0A    2.40   19357.0   516.7   0.04000   0.08000   0.01200   0.02200   0.03200');
+  p.push('');
+  p.push('SOC CORRECTED CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS');
+  p.push('  0-1.0A  ->  4-3.0A    2.40   19357.0   516.7   0.03456   0.00120   0.00220   0.00320');
+  p.push('');
+  const sample=p.join('\n'); const sheets=parseAllVariants(sample); SHEETS=backfillTheta(sheets); MASTER=Object.values(SHEETS).flat(); BEST=buildBest(SHEETS,'SOC_length,SOC_velocity,nonSOC_length,nonSOC_velocity'); render(); document.getElementById('status').textContent='已加载四表联合示例（4 行）';
+}
+
+// 自测：Split（nonSOC 下配齐 length/velocity）
+function runSplitTest(){
+  const t=[];
+  t.push('ABSORPTION SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS');
+  t.push('  0-1.0A  ->  1-3.0A    2.10   16935.0   590.5   0.01000   0.05000   0.01000   0.02000   0.03000');
+  t.push('  0-1.0A  ->  2-3.0A    2.30   18565.0   539.1   0.00500   0.00100   0.01000   0.02000   0.03000');
+  t.push('');
+  t.push('CD SPECTRUM VIA TRANSITION ELECTRIC DIPOLE MOMENTS');
+  t.push('  0-1.0A  ->  1-3.0A    2.10   16935.0   590.5   -0.01000   0.00100   0.00200   0.00300');
+  t.push('  0-1.0A  ->  2-3.0A    2.30   18565.0   539.1   0.01234   0.00150   0.00250   0.00350');
+  t.push('');
+  t.push('ABSORPTION SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS');
+  t.push('  0-1.0A  ->  1-3.0A    2.10   16935.0   590.5   0.01100   0.05500   0.01100   0.02100   0.03100');
+  t.push('  0-1.0A  ->  2-3.0A    2.30   18565.0   539.1   0.01000   0.06000   0.01200   0.02200   0.03200');
+  t.push('');
+  t.push('CD SPECTRUM VIA TRANSITION VELOCITY DIPOLE MOMENTS');
+  t.push('  0-1.0A  ->  1-3.0A    2.10   16935.0   590.5   -0.01100   0.00110   0.00210   0.00310');
+  t.push('  0-1.0A  ->  2-3.0A    2.30   18565.0   539.1   0.01334   0.00160   0.00260   0.00360');
+  t.push('');
+  const sample=t.join('\n'); const sheets=parseAllVariants(sample); SHEETS=backfillTheta(sheets); MASTER=Object.values(SHEETS).flat(); BEST=buildBest(SHEETS,'SOC_length,SOC_velocity,nonSOC_length,nonSOC_velocity'); document.getElementById('variantSelect').value='nonSOC_length'; document.getElementById('gModeSelect').value='split_cols'; render(); document.getElementById('status').textContent='已加载 Split 示例（2 行，展示 g_len 与 g_vel）';
+}
+
+// init
+(function init(){
+  const dz=document.getElementById('dropZone'); const fi=document.getElementById('fileInput');
+  dz.addEventListener('click', ()=> fi.click());
+  dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e=>{ e.preventDefault(); dz.classList.remove('dragover'); if(e.dataTransfer.files?.length) handleFile(e.dataTransfer.files[0]); });
+  fi.addEventListener('change', e=>{ if(e.target.files?.length) handleFile(e.target.files[0]); });
+
+  document.getElementById('variantSelect').addEventListener('change', render);
+  document.getElementById('bucketSelect').addEventListener('change', render);
+  document.getElementById('gModeSelect').addEventListener('change', render);
+  document.getElementById('gThreshold').addEventListener('change', render);
+  document.getElementById('searchBox').addEventListener('input', render);
+  document.getElementById('exportBtn').addEventListener('click', exportCSV);
+
+  // tests
+  document.getElementById('loadSample').addEventListener('click', runSelfTest);
+  document.getElementById('loadSocMock').addEventListener('click', runSocMockTest);
+  document.getElementById('loadQuad').addEventListener('click', runQuadTest);
+  document.getElementById('loadSplit').addEventListener('click', runSplitTest);
+})();
+</script>
 </body>
 </html>
